@@ -85,9 +85,8 @@ async function runOracle() {
 
     const startTime = Date.now();
 
-    // FAST TRACK MODELS (No Reasoner here - too slow)
-    // We use DeepSeek V3, Kimi, Minimax for proposal/critique/defense loops.
-    const FAST_MODELS = ["deepseek", "kimi", "minimax"];
+    // FAST TRACK MODELS (No Reasoner here - too slow. No Minimax - API unstable)
+    const FAST_MODELS = ["deepseek", "kimi"];
 
     const updateProgress = (idx, labelOverride = null) => {
         document.querySelectorAll('.stage-item').forEach((el, i) => {
@@ -191,7 +190,7 @@ async function runOracle() {
         updateProgress(5);
         const s6 = await callAPI("kimi",
             `Rewrite this text to be clinically precise, authoritative, and stripped of all meta-commentary ("Here is the answer"). Just the raw protocol.\n\nText:\n${s5}`,
-            `Chief Editor. STRICT RULES:\n${WRITING_GUIDE}`, 1000);
+            `Chief Editor. STRICT RULES:\n${WRITING_GUIDE}\nOUTPUT ONLY THE FINAL PROTOCOL text.`, 1000);
         addTrace("Polish", "Kimi K2.5", s6);
 
         // ── DONE ──
