@@ -1,4 +1,5 @@
 import './style.css';
+import tolkeSystemPrompt from './prompts/tolke-system-prompt.txt?raw';
 
 const API_BASE = window.location.origin;
 
@@ -51,6 +52,8 @@ const FALLBACK_PERSONAS = {
     }
 };
 
+const SHARED_STYLE_ADDON = "Be concrete, direct, and simple. If the user avoids the point, call it out clearly and bring focus back.";
+
 const state = {
     personas: {},
     selectedPersona: null,
@@ -64,6 +67,8 @@ const state = {
         "gemini-flash": [],
         "gemini-pro": []
     },
+    tolkeHistory: [],
+    selectedTolkeModel: "gemini-flash",
     oracleBusy: false
 };
 
@@ -364,7 +369,12 @@ async function sendCouncilMessage() {
     const prompt = historyTail ? `${historyTail}\nUSER: ${text}` : text;
 
     try {
-        const response = await callAPI(persona.preferred_model || "deepseek", prompt, persona.system_prompt, 620);
+        const response = await callAPI(
+            persona.preferred_model || "deepseek",
+            prompt,
+            `${persona.system_prompt}\n\n${SHARED_STYLE_ADDON}`,
+            620
+        );
         appendBubble("council-chat-history", "ai", response, persona.name);
 
         state.councilHistory.push({ role: "user", content: text });
@@ -392,11 +402,68 @@ async function sendDirectMessage() {
     const prompt = history.map((h) => `${h.role.toUpperCase()}: ${h.content}`).join("\n");
 
     try {
-        const reply = await callAPI(model, prompt, "Direct answer mode. Be concise but complete.", 700);
+        const reply = await callAPI(
+            model,
+            prompt,
+            `Direct answer mode. Be concise but complete.\n${SHARED_STYLE_ADDON}`,
+            700
+        );
         state.directHistoryByModel[model].push({ role: "ai", content: reply, meta: MODEL_LABELS[model] });
         redrawDirectHistory();
     } catch (e) {
         appendBubble("chat-history", "ai", `Error: ${e.message}`, "System");
+    }
+}
+
+function renderTolkeModels() {
+    const container = document.getElementById("tolke-model-list");
+    container.innerHTML = "";
+
+    MODELS.forEach((m) => {
+        const button = document.createElement("button");
+        button.className = `selector-btn ${state.selectedTolkeModel === m ? "active" : ""}`;
+        button.type = "button";
+        button.innerHTML = `<span class=\"selector-title\">${MODEL_LABELS[m]}</span><span class=\"selector-sub\">Tolke voice</span>`;
+        button.onclick = () => {
+            state.selectedTolkeModel = m;
+            renderTolkeModels();
+            redrawTolkeHistory();
+        };
+        container.appendChild(button);
+    });
+}
+
+function redrawTolkeHistory() {
+    const container = document.getElementById("tolke-history");
+    container.innerHTML = "";
+    const history = state.tolkeHistory || [];
+    if (!history.length) {
+        appendBubble("tolke-history", "ai", "Tolke online. Say what is real, and I’ll challenge what doesn’t add up.");
+        return;
+    }
+
+    history.forEach((item) => appendBubble("tolke-history", item.role, item.content, item.meta || ""));
+}
+
+async function sendTolkeMessage() {
+    const input = document.getElementById("tolke-input");
+    const text = input.value.trim();
+    if (!text) return;
+
+    const model = state.selectedTolkeModel;
+    input.value = "";
+    appendBubble("tolke-history", "user", text);
+    state.tolkeHistory.push({ role: "user", content: text });
+
+    const history = state.tolkeHistory.slice(-10);
+    const prompt = history.map((h) => `${h.role.toUpperCase()}: ${h.content}`).join("\n");
+
+    try {
+        const reply = await callAPI(model, prompt, tolkeSystemPrompt, 900);
+        state.tolkeHistory.push({ role: "ai", content: reply, meta: `Tolke · ${MODEL_LABELS[model]}` });
+        redrawTolkeHistory();
+    } catch (e) {
+        appendBubble("tolke-history", "ai", `Error: ${e.message}`, "System");
     }
 }
 
@@ -419,11 +486,14 @@ window.switchTab = switchTab;
 window.toggleTrace = toggleTrace;
 window.sendCouncilMessage = sendCouncilMessage;
 window.sendDirectMessage = sendDirectMessage;
+window.sendTolkeMessage = sendTolkeMessage;
 
 window.addEventListener("DOMContentLoaded", async () => {
     switchTab("home");
     renderModelList();
     redrawDirectHistory();
+    renderTolkeModels();
+    redrawTolkeHistory();
 
     await loadPersonas();
     renderPersonaList();

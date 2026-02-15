@@ -21,6 +21,7 @@
             <button class="nav-link" data-tab="oracle" onclick="switchTab('oracle')">Oracle Lab</button>
             <button class="nav-link" data-tab="council" onclick="switchTab('council')">Council Hall</button>
             <button class="nav-link" data-tab="chat" onclick="switchTab('chat')">Direct Uplink</button>
+            <button class="nav-link" data-tab="tolke" onclick="switchTab('tolke')">Tolke</button>
         </nav>
         <div class="sidebar-footer">
             <div class="engine-badge">Adaptive Oracle Online</div>
@@ -164,6 +165,31 @@
                         <div class="input-bar">
                             <input type="text" id="chat-input" placeholder="Message engine..." onkeydown="if(event.key==='Enter') sendDirectMessage()">
                             <button onclick="sendDirectMessage()">Send</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="tab-tolke" class="tab-content">
+                <div class="section-header">
+                    <h1>Tolke</h1>
+                    <p class="lead">Sharp therapeutic chat with memory, pattern callouts, and clear reflection.</p>
+                </div>
+
+                <div class="chat-layout">
+                    <div class="agent-window selector-panel">
+                        <div class="agent-title">Tolke Engine</div>
+                        <div id="tolke-model-list" class="selector-list"></div>
+                    </div>
+                    <div class="agent-window conversation-panel">
+                        <div class="agent-header">
+                            <span class="agent-title">Tolke Session</span>
+                            <span class="agent-status">Live</span>
+                        </div>
+                        <div class="agent-chat" id="tolke-history"></div>
+                        <div class="input-bar">
+                            <input type="text" id="tolke-input" placeholder="Tell Tolke what is going on..." onkeydown="if(event.key==='Enter') sendTolkeMessage()">
+                            <button onclick="sendTolkeMessage()">Send</button>
                         </div>
                     </div>
                 </div>
