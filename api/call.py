@@ -55,9 +55,11 @@ class handler(BaseHTTPRequestHandler):
             
             # Map simplified names to real model IDs
             # Per user scan list: models/gemini-3-flash-preview, models/gemini-3-pro-preview
+            # Switching 'flash' to 2.0 for stability/speed per user report of timeouts
             real_model = "gemini-2.0-flash" 
-            if "flash" in mk: real_model = "gemini-3-flash-preview"
-            elif "pro" in mk: real_model = "gemini-3-pro-preview"
+            if "flash" in mk: real_model = "gemini-2.0-flash"
+            elif "pro" in mk: real_model = "gemini-2.0-pro-exp-02-05" # Trying 2.0 Pro Experimental (smartest) or fallback to 1.5 Pro
+
             
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{real_model}:generateContent?key={api_key}"
             
