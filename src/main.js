@@ -213,7 +213,7 @@ function chr(i) { return String.fromCharCode(65 + i); }
 // ─── COUNCIL HALL ─────────────────────────────────────────────────────────────
 
 async function initCouncil() {
-    const list = document.getElementById('persona-list');
+    const list = document.getElementById('council-persona-list');
     list.innerHTML = '';
     Object.keys(PERSONAS).forEach(key => {
         const p = PERSONAS[key];
@@ -258,7 +258,7 @@ async function sendCouncilMessage() {
 // ─── DIRECT UPLINK ────────────────────────────────────────────────────────────
 
 async function initDirect() {
-    const list = document.getElementById('model-list');
+    const list = document.getElementById('chat-model-list');
     list.innerHTML = '';
     MODELS.forEach(m => {
         const el = document.createElement('div');
