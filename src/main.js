@@ -1,5 +1,7 @@
 import './style.css';
 
+console.log("AI Council: Main.js loaded");
+
 const API_BASE = window.location.origin;
 
 // REMOVED Minimax. RESTORED DeepSeek/Kimi. ADDED Gemini.
@@ -213,7 +215,10 @@ function chr(i) { return String.fromCharCode(65 + i); }
 // ─── COUNCIL HALL ─────────────────────────────────────────────────────────────
 
 async function initCouncil() {
+    console.log("Initializing Council...");
     const list = document.getElementById('council-persona-list');
+    if (!list) { console.error("Missing council-persona-list"); return; }
+
     list.innerHTML = '';
     Object.keys(PERSONAS).forEach(key => {
         const p = PERSONAS[key];
@@ -258,7 +263,10 @@ async function sendCouncilMessage() {
 // ─── DIRECT UPLINK ────────────────────────────────────────────────────────────
 
 async function initDirect() {
+    console.log("Initializing Direct Uplink...");
     const list = document.getElementById('chat-model-list');
+    if (!list) { console.error("Missing chat-model-list"); return; }
+
     list.innerHTML = '';
     MODELS.forEach(m => {
         const el = document.createElement('div');
@@ -314,11 +322,11 @@ function toggleTrace() {
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
-window.onload = () => {
+window.addEventListener('DOMContentLoaded', () => {
     switchTab('home');
     initCouncil();
     initDirect();
-};
+});
 
 // Expose to global scope for inline onclick handlers
 window.runOracle = runOracle;
