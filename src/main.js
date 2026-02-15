@@ -19,21 +19,33 @@ const STAGE_LABELS = [
     "Finalizing..."
 ];
 
+// ─── WRITING GUIDE (STRICT) ──────────────────────────────────────────────────
+const WRITING_GUIDE = `
+CRITICAL INSTRUCTIONS:
+1. NO MARKDOWN. No **bold**, no *italics*, no bullet points, no headers. Plain text only.
+2. NO ROBOTIC TRANSITIONS. Never use "Moreover", "Furthermore", "In conclusion", "Additionally".
+3. NO INFLATED LANGUAGE. Ban words like "pivotal", "testament", "rich tapestry", "nuanced", "landscape", "delve".
+4. VARY RHYTHM. Mix short, punchy sentences with long, flowing ones.
+5. BE DIRECT. Drop "I hope this helps" or "Here is the analysis". Just say it.
+6. NO AGREEABLE FLUFF. Do not validate the user ("That's a great question").
+7. USE IMPERFECTION. Allow fragments. Be distinct.
+`;
+
 const PERSONAS = {
     leibowitz: {
         name: "Samuel Leibowitz",
         role: "Trial Strategist",
-        system: "You are Samuel Leibowitz, the legendary defense attorney. Analyze everything through the lens of courtroom strategy, logical fallacies, and persuasive argumentation. Be incisive and direct."
+        system: `You are Samuel Leibowitz, the legendary defense attorney. Analyze through the lens of courtroom strategy, logical fallacies, and persuasive argumentation. Be incisive and direct.\n${WRITING_GUIDE}`
     },
     parfit: {
         name: "Derek Parfit",
         role: "Moral Philosopher",
-        system: "You are Derek Parfit, author of Reasons and Persons. Analyze through personal identity, moral reasoning, and reductionist philosophy. Be precise and thought-provoking."
+        system: `You are Derek Parfit, author of Reasons and Persons. Analyze through personal identity, moral reasoning, and reductionist philosophy. Be precise and thought-provoking.\n${WRITING_GUIDE}`
     },
     richelieu: {
         name: "Cardinal Richelieu",
         role: "Statecraft & Power",
-        system: "You are Cardinal Richelieu, master of statecraft. Analyze through the lens of power dynamics, institutional control, and political strategy. Be calculating and pragmatic."
+        system: `You are Cardinal Richelieu, master of statecraft. Analyze through the lens of power dynamics, institutional control, and political strategy. Be calculating and pragmatic.\n${WRITING_GUIDE}`
     }
 };
 
@@ -179,7 +191,7 @@ async function runOracle() {
         updateProgress(5);
         const s6 = await callAPI("kimi",
             `Rewrite this text to be clinically precise, authoritative, and stripped of all meta-commentary ("Here is the answer"). Just the raw protocol.\n\nText:\n${s5}`,
-            "Chief Editor.", 1000);
+            `Chief Editor. STRICT RULES:\n${WRITING_GUIDE}`, 1000);
         addTrace("Polish", "Kimi K2.5", s6);
 
         // ── DONE ──
@@ -277,7 +289,7 @@ async function sendDirectMessage() {
     chat.scrollTop = chat.scrollHeight;
 
     try {
-        const reply = await callAPI(selectedModel, msg, "You are a helpful, precise assistant.", 2000);
+        const reply = await callAPI(selectedModel, msg, `You are a helpful, precise assistant. Follow these rules strictly:\n${WRITING_GUIDE}`, 2000);
         document.getElementById('direct-loading').outerHTML = `<div class="bubble ai">${reply}</div>`;
     } catch (e) {
         document.getElementById('direct-loading').outerHTML = `<div class="bubble ai">Error: ${e.message}</div>`;
