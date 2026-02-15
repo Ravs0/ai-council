@@ -102,7 +102,7 @@ class handler(BaseHTTPRequestHandler):
             if not api_key:
                 return self._json(400, {"error": "Model gemini is not configured."})
 
-            gemini_model = "gemini-2.5-flash" if model_key == "gemini-flash" else "gemini-2.5-pro"
+            gemini_model = "gemini-3-flash" if model_key == "gemini-flash" else "gemini-2.5-pro"
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={api_key}"
             payload = {
                 "contents": [{"parts": [{"text": f"{system}\n\n{prompt}"}]}],
@@ -116,6 +116,11 @@ class handler(BaseHTTPRequestHandler):
             for attempt in range(MAX_RETRIES + 1):
                 try:
                     response = http.post(url, json=payload, timeout=REQUEST_TIMEOUT)
+                    if response.status_code in (404,) and model_key == "gemini-flash":
+                        gemini_model = "gemini-2.5-flash"
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={api_key}"
+                        response = http.post(url, json=payload, timeout=REQUEST_TIMEOUT)
+
                     if response.status_code in (408, 409, 429, 500, 502, 503, 504):
                         last_error = f"upstream {response.status_code}"
                         if attempt < MAX_RETRIES:
