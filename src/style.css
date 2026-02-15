@@ -1,15 +1,15 @@
 :root {
-    --bg-deep: #eef2f7;
-    --bg-surface: #ffffff;
-    --bg-elevated: #f7f9fc;
-    --bg-input: #f2f4f8;
+    --bg-deep: #dce4ee;
+    --bg-surface: #eef3f8;
+    --bg-elevated: #e5edf6;
+    --bg-input: #dde7f2;
 
-    --text-primary: #1b2736;
-    --text-secondary: #43556b;
-    --text-muted: #71839a;
+    --text-primary: #172434;
+    --text-secondary: #33475f;
+    --text-muted: #5e738c;
 
-    --border: #d7e0ea;
-    --border-active: #a6b7cb;
+    --border: #c4d2e1;
+    --border-active: #8ea7c0;
 
     --accent: #1b2736;
     --accent-dim: #8ca0b7;
@@ -34,9 +34,9 @@
 body {
     font-family: 'Space Grotesk', -apple-system, sans-serif;
     background:
-        radial-gradient(1400px 800px at -15% -20%, #ffffff 0%, transparent 60%),
-        radial-gradient(1200px 700px at 120% 0%, #f4f8fd 0%, transparent 58%),
-        linear-gradient(180deg, #edf2f8 0%, #e6edf5 100%);
+        radial-gradient(1400px 800px at -15% -20%, #f2f7fc 0%, transparent 60%),
+        radial-gradient(1200px 700px at 120% 0%, #e8f0f8 0%, transparent 58%),
+        linear-gradient(180deg, #dfe8f2 0%, #d2dde9 100%);
     color: var(--text-primary);
     height: 100vh;
     display: flex;
@@ -99,7 +99,7 @@ body {
 }
 
 .nav-link.active {
-    background: #e8eef6;
+    background: #d8e4f1;
     color: var(--text-primary);
     border-color: var(--border-active);
 }
@@ -158,7 +158,7 @@ p.lead {
 
 .feature-card:hover {
     border-color: var(--border-active);
-    background: #f8fbff;
+    background: #edf3fa;
     transform: translateY(-2px);
 }
 
@@ -551,7 +551,7 @@ p.lead {
 }
 
 .bubble.user {
-    background: #dfe9f5;
+    background: #cfdeef;
     color: var(--text-primary);
     align-self: flex-end;
     border-bottom-right-radius: 2px;
@@ -597,7 +597,7 @@ p.lead {
 }
 
 .input-bar button {
-    background: #d7e5f6;
+    background: #cddff2;
     color: var(--text-primary);
     border: none;
     padding: 12px 24px;
@@ -697,8 +697,9 @@ p.lead {
 }
 
 .selector-btn.active {
-    border-color: var(--text-primary);
-    background: #232322;
+    border-color: var(--border-active);
+    background: #d4e1ef;
+    color: var(--text-primary);
 }
 
 .selector-title {
@@ -725,22 +726,21 @@ p.lead {
 @media (max-width: 900px) {
     body {
         display: block;
-        padding-bottom: 72px;
+        padding-bottom: 0;
     }
 
     .sidebar {
-        position: fixed;
+        position: sticky;
         left: 0;
         right: 0;
-        bottom: 0;
-        top: auto;
+        top: 0;
         width: 100%;
-        height: 72px;
+        height: auto;
         border-right: 0;
-        border-top: 1px solid var(--border);
-        padding: 8px 10px;
+        border-bottom: 1px solid var(--border);
+        padding: 8px 10px 10px;
         z-index: 20;
-        background: rgba(246, 250, 255, 0.96);
+        background: rgba(225, 235, 246, 0.94);
         backdrop-filter: blur(8px);
     }
 
@@ -750,21 +750,25 @@ p.lead {
     }
 
     .sidebar-nav {
-        display: grid;
-        grid-template-columns: repeat(5, 1fr);
-        gap: 4px;
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        padding-bottom: 2px;
     }
 
     .nav-link {
         margin: 0;
         text-align: center;
-        padding: 10px 2px;
-        font-size: 10px;
+        white-space: nowrap;
+        padding: 9px 12px;
+        font-size: 11px;
         line-height: 1.2;
+        border: 1px solid var(--border);
+        background: rgba(238, 245, 252, 0.85);
     }
 
     .main-viewport {
-        padding: 14px 12px 96px;
+        padding: 14px 12px 24px;
         height: auto;
     }
 
@@ -784,11 +788,22 @@ p.lead {
 
     .home-grid {
         grid-template-columns: 1fr;
-        gap: 12px;
+        gap: 10px;
     }
 
     .feature-card {
-        padding: 20px;
+        padding: 16px;
+        border-radius: 12px;
+    }
+
+    .feature-card h3 {
+        font-size: 18px;
+        margin-bottom: 6px;
+    }
+
+    .feature-card p {
+        font-size: 13px;
+        line-height: 1.45;
     }
 
     .oracle-controls {

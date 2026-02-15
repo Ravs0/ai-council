@@ -10,7 +10,7 @@ const MODEL_LABELS = {
     kimi: "Kimi K2.5",
     minimax: "MiniMax M2.1",
     reasoner: "DeepSeek Reasoner",
-    "gemini-flash": "Gemini 2.5 Flash",
+    "gemini-flash": "Gemini 3 Flash",
     "gemini-pro": "Gemini 2.5 Pro"
 };
 
