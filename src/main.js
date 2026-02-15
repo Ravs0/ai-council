@@ -2,12 +2,15 @@ import './style.css';
 
 const API_BASE = window.location.origin;
 
-const MODELS = ["deepseek", "kimi", "minimax", "reasoner"];
+const MODELS = ["deepseek", "kimi", "minimax", "reasoner", "gemini-flash", "gemini-pro"];
+const ORACLE_PROPOSAL_MODELS = ["deepseek", "kimi", "reasoner", "gemini-flash"];
 const MODEL_LABELS = {
     deepseek: "DeepSeek V3.2",
     kimi: "Kimi K2.5",
     minimax: "MiniMax M2.1",
-    reasoner: "DeepSeek Reasoner"
+    reasoner: "DeepSeek Reasoner",
+    "gemini-flash": "Gemini 2.5 Flash",
+    "gemini-pro": "Gemini 2.5 Pro"
 };
 
 const STAGE_LABELS_FULL = [
@@ -57,7 +60,9 @@ const state = {
         deepseek: [],
         kimi: [],
         minimax: [],
-        reasoner: []
+        reasoner: [],
+        "gemini-flash": [],
+        "gemini-pro": []
     },
     oracleBusy: false
 };
@@ -203,7 +208,7 @@ async function runOracle() {
             addTrace("Frame", MODEL_LABELS.deepseek, s1);
 
             updateProgress(1, stageLabels);
-            const draftModels = ["deepseek", "kimi"];
+            const draftModels = ["deepseek", "gemini-flash"];
             const draftResults = await Promise.allSettled(
                 draftModels.map((m) => callAPI(m, `Brief: ${s1}\n\nQuestion: ${msg}\n\nReturn a practical answer in <=160 words.`, "Analytical mode.", 340))
             );
@@ -220,8 +225,8 @@ async function runOracle() {
 
             updateProgress(2, stageLabels);
             const payload = drafts.map((d) => `[${d.model}] ${d.text}`).join("\n\n");
-            const merged = await callAPI("reasoner", `Unify these responses into one action-ready answer for: ${msg}\n\n${payload}\n\nOutput: clear steps + risk note.`, "Senior synthesizer.", 520);
-            addTrace("Merge", MODEL_LABELS.reasoner, merged);
+            const merged = await callAPI("gemini-pro", `Unify these responses into one action-ready answer for: ${msg}\n\n${payload}\n\nOutput: clear steps + risk note.`, "Senior synthesizer.", 520);
+            addTrace("Merge", MODEL_LABELS["gemini-pro"], merged);
 
             updateProgress(3, stageLabels);
             document.getElementById("oracle-output").textContent = merged;
@@ -235,13 +240,13 @@ async function runOracle() {
 
         updateProgress(1, stageLabels);
         const proposals = await Promise.allSettled(
-            MODELS.map((m) => callAPI(m, `Brief: ${s1}\n\nQuestion: ${msg}\n\nProvide your best answer (<=180 words).`, "Analytical mode.", 420))
+            ORACLE_PROPOSAL_MODELS.map((m) => callAPI(m, `Brief: ${s1}\n\nQuestion: ${msg}\n\nProvide your best answer (<=180 words).`, "Analytical mode.", 420))
         );
         const liveProposals = [];
         proposals.forEach((res, idx) => {
             if (res.status === "fulfilled") {
-                liveProposals.push({ model: MODELS[idx], text: res.value });
-                addTrace("Proposal", MODEL_LABELS[MODELS[idx]], res.value);
+                liveProposals.push({ model: ORACLE_PROPOSAL_MODELS[idx], text: res.value });
+                addTrace("Proposal", MODEL_LABELS[ORACLE_PROPOSAL_MODELS[idx]], res.value);
             }
         });
 
@@ -270,8 +275,8 @@ async function runOracle() {
         addTrace("Defense", "Council", defensePayload);
 
         updateProgress(4, stageLabels);
-        const s5 = await callAPI("reasoner", `Experts refined positions on: ${msg}\n\n${defensePayload}\n\nSynthesize one final protocol with priorities and risks.`, "Senior architect.", 620);
-        addTrace("Reconciliation", MODEL_LABELS.reasoner, s5);
+        const s5 = await callAPI("gemini-pro", `Experts refined positions on: ${msg}\n\n${defensePayload}\n\nSynthesize one final protocol with priorities and risks.`, "Senior architect.", 620);
+        addTrace("Reconciliation", MODEL_LABELS["gemini-pro"], s5);
 
         updateProgress(5, stageLabels);
         const s6 = await callAPI("kimi", `Improve readability and remove meta-talk from this response.\n\nText:\n${s5}`, "Senior editor.", 620);
