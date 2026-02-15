@@ -1,20 +1,16 @@
 import './style.css';
 
-console.log("AI Council: Main.js loaded");
-
 const API_BASE = window.location.origin;
 
-// REMOVED Minimax. RESTORED DeepSeek/Kimi. ADDED Gemini.
-const MODELS = ["deepseek", "kimi", "reasoner", "gemini-flash", "gemini-pro"];
-const MODEL_NAMES = {
+const MODELS = ["deepseek", "kimi", "minimax", "reasoner"];
+const MODEL_LABELS = {
     deepseek: "DeepSeek V3.2",
     kimi: "Kimi K2.5",
-    reasoner: "DeepSeek Reasoner",
-    "gemini-flash": "Gemini 3 Flash",
-    "gemini-pro": "Gemini 3 Pro"
+    minimax: "MiniMax M2.1",
+    reasoner: "DeepSeek Reasoner"
 };
 
-const STAGE_LABELS = [
+const STAGE_LABELS_FULL = [
     "Deconstructing Inquiry...",
     "Drafting Parallel Proposals...",
     "Conducting Blind Peer Review...",
@@ -24,313 +20,411 @@ const STAGE_LABELS = [
     "Finalizing..."
 ];
 
-// ─── WRITING GUIDE (STRICT) ──────────────────────────────────────────────────
-const WRITING_GUIDE = `
-CRITICAL INSTRUCTIONS:
-1. NO MARKDOWN. No **bold**, no *italics*, no bullet points, no headers. Plain text only.
-2. NO ROBOTIC TRANSITIONS. Never use "Moreover", "Furthermore", "In conclusion", "Additionally".
-3. NO INFLATED LANGUAGE. Ban words like "pivotal", "testament", "rich tapestry", "nuanced", "landscape", "delve".
-4. VARY RHYTHM. Mix short, punchy sentences with long, flowing ones.
-5. BE DIRECT. Drop "I hope this helps" or "Here is the analysis". Just say it.
-6. NO AGREEABLE FLUFF. Do not validate the user ("That's a great question").
-7. USE IMPERFECTION. Allow fragments. Be distinct.
-`;
+const STAGE_LABELS_SWIFT = [
+    "Framing Core Question...",
+    "Drafting Dual Strategies...",
+    "Reconciling for Action...",
+    "Finalizing..."
+];
 
-const PERSONAS = {
+const FALLBACK_PERSONAS = {
     leibowitz: {
         name: "Samuel Leibowitz",
         role: "Trial Strategist",
-        system: `You are Samuel Leibowitz, the legendary defense attorney. Analyze through the lens of courtroom strategy, logical fallacies, and persuasive argumentation. Be incisive and direct.\n${WRITING_GUIDE}`
-    },
-    parfit: {
-        name: "Derek Parfit",
-        role: "Moral Philosopher",
-        system: `You are Derek Parfit, author of Reasons and Persons. Analyze through personal identity, moral reasoning, and reductionist philosophy. Be precise and thought-provoking.\n${WRITING_GUIDE}`
+        preferred_model: "deepseek",
+        system_prompt: "You are Samuel Leibowitz in peak form. Reconstruct facts first, separate evidence from inference, and produce courtroom-ready strategy in concise language."
     },
     richelieu: {
         name: "Cardinal Richelieu",
-        role: "Statecraft & Power",
-        system: `You are Cardinal Richelieu, master of statecraft. Analyze through the lens of power dynamics, institutional control, and political strategy. Be calculating and pragmatic.\n${WRITING_GUIDE}`
+        role: "Statecraft Architect",
+        preferred_model: "reasoner",
+        system_prompt: "You are Cardinal Richelieu advising on strategy through raison d'etat. Map actors, leverage, sequencing, betrayal points, and concrete options."
+    },
+    parfit: {
+        name: "Derek Parfit",
+        role: "Moral and Personal Identity Analyst",
+        preferred_model: "reasoner",
+        system_prompt: "You are Derek Parfit. Clarify terms, test claims with counterexamples, and separate prudential from moral reasons."
     }
 };
 
-let selectedPersona = null;
-let selectedModel = null;
+const state = {
+    personas: {},
+    selectedPersona: null,
+    selectedDirectModel: "deepseek",
+    councilHistory: [],
+    directHistoryByModel: {
+        deepseek: [],
+        kimi: [],
+        minimax: [],
+        reasoner: []
+    },
+    oracleBusy: false
+};
 
-// ─── API CALL ────────────────────────────────────────────────────────────────
+async function callAPI(model, prompt, system = "", maxTokens = 700, timeoutMs = 22000) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-async function callAPI(model, prompt, system = "", maxTokens = 1000) {
-    const res = await fetch(`${API_BASE}/api/call`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, prompt, system, max_tokens: maxTokens })
-    });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    return data.text;
+    try {
+        const res = await fetch(`${API_BASE}/api/call`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model, prompt, system, max_tokens: maxTokens }),
+            signal: controller.signal
+        });
+
+        const data = await res.json();
+        if (!res.ok || data.error) {
+            throw new Error(data.error || `Request failed (${res.status})`);
+        }
+
+        return data.text || "";
+    } catch (err) {
+        if (err.name === "AbortError") {
+            throw new Error("Provider timeout. Retry or use Swift mode.");
+        }
+        throw err;
+    } finally {
+        clearTimeout(timeout);
+    }
 }
 
-// ─── ORACLE PROTOCOL ─────────────────────────────────────────────────────────
+function appendBubble(containerId, role, content, meta = "") {
+    const container = document.getElementById(containerId);
+    const bubble = document.createElement("div");
+    bubble.className = `bubble ${role}`;
+
+    if (meta) {
+        const metaEl = document.createElement("div");
+        metaEl.className = "bubble-meta";
+        metaEl.textContent = meta;
+        bubble.appendChild(metaEl);
+    }
+
+    const contentEl = document.createElement("div");
+    contentEl.textContent = content;
+    bubble.appendChild(contentEl);
+
+    container.appendChild(bubble);
+    container.scrollTop = container.scrollHeight;
+}
+
+function clearChat(containerId, text) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = "";
+    appendBubble(containerId, "ai", text);
+}
+
+function switchTab(id) {
+    document.querySelectorAll(".nav-link").forEach((el) => el.classList.remove("active"));
+    document.querySelectorAll(`.nav-link[data-tab=\"${id}\"]`).forEach((el) => el.classList.add("active"));
+    document.querySelectorAll(".tab-content").forEach((el) => el.classList.remove("active"));
+    const target = document.getElementById(`tab-${id}`);
+    if (target) target.classList.add("active");
+}
+
+function toggleTrace() {
+    const el = document.getElementById("trace-container");
+    el.style.display = el.style.display === "none" ? "block" : "none";
+}
+
+function oracleMode() {
+    const explicit = document.getElementById("oracle-mode").value;
+    if (explicit === "swift") return "swift";
+    if (explicit === "full") return "full";
+    return window.matchMedia("(max-width: 900px)").matches ? "swift" : "full";
+}
+
+function updateProgress(stageIdx, labels) {
+    document.querySelectorAll(".stage-item").forEach((el, i) => {
+        el.classList.remove("active");
+        if (i < stageIdx) el.classList.add("done");
+    });
+    const currentStage = document.getElementById(`s${stageIdx + 1}`);
+    if (currentStage) currentStage.classList.add("active");
+    document.getElementById("nexus-label").textContent = labels[stageIdx] || "Processing...";
+}
+
+function addTrace(stage, model, content) {
+    const entry = document.createElement("div");
+    entry.className = "trace-entry";
+
+    const stageEl = document.createElement("div");
+    stageEl.className = "trace-stage";
+    stageEl.textContent = stage;
+
+    const modelEl = document.createElement("div");
+    modelEl.className = "trace-model";
+    modelEl.textContent = model;
+
+    const contentEl = document.createElement("div");
+    contentEl.className = "trace-content";
+    contentEl.textContent = content;
+
+    entry.appendChild(stageEl);
+    entry.appendChild(modelEl);
+    entry.appendChild(contentEl);
+    document.getElementById("trace-container").appendChild(entry);
+}
+
+function markOracleDone(elapsed, mode, stageCount, modelCount) {
+    document.getElementById("nexus-animation").style.display = "none";
+    document.getElementById("oracle-result").style.display = "block";
+    document.getElementById("result-meta").textContent = `${stageCount}/${stageCount} stages · ${modelCount} models · ${elapsed}s · ${mode.toUpperCase()}`;
+}
 
 async function runOracle() {
-    const input = document.getElementById('oracle-input');
+    if (state.oracleBusy) return;
+
+    const input = document.getElementById("oracle-input");
     const msg = input.value.trim();
     if (!msg) return;
 
-    const btn = document.getElementById('oracle-run-btn');
+    const mode = oracleMode();
+    const stageLabels = mode === "full" ? STAGE_LABELS_FULL : STAGE_LABELS_SWIFT;
+
+    const btn = document.getElementById("oracle-run-btn");
+    state.oracleBusy = true;
     btn.disabled = true;
 
-    // UI Reset
-    document.getElementById('stage-tracker').style.display = 'flex';
-    document.getElementById('nexus-animation').style.display = 'flex';
-    document.getElementById('oracle-result').style.display = 'none';
-    document.getElementById('trace-container').innerHTML = '';
+    document.getElementById("stage-tracker").style.display = "flex";
+    document.getElementById("nexus-animation").style.display = "flex";
+    document.getElementById("oracle-result").style.display = "none";
+    document.getElementById("trace-container").style.display = "none";
+    document.getElementById("trace-container").innerHTML = "";
 
-    const startTime = Date.now();
-
-    // FAST TRACK MODELS: Hybrid Mix (DeepSeek + Kimi + Gemini Flash)
-    const FAST_MODELS = ["deepseek", "kimi", "gemini-flash"];
-
-    const updateProgress = (idx, labelOverride = null) => {
-        document.querySelectorAll('.stage-item').forEach((el, i) => {
-            el.classList.remove('active');
-            if (i < idx) el.classList.add('done');
-        });
-        const s = document.getElementById(`s${idx + 1}`);
-        if (s) s.classList.add('active');
-
-        const label = labelOverride || STAGE_LABELS[idx];
-        document.getElementById('nexus-label').textContent = label;
-
-        // Update Grid Status
-        ['deepseek', 'kimi', 'reasoner', 'gemini-flash', 'gemini-pro'].forEach(k => {
-            const node = document.getElementById(`node-${k}`);
-            const role = document.getElementById(`role-${k}`);
-            if (!node || !role) return;
-
-            // Visual Logic
-            if (idx === 0 && k === 'gemini-flash') { role.textContent = 'Analyst'; node.classList.add('active'); }
-            else if ((idx === 1 || idx === 3) && FAST_MODELS.includes(k)) { role.textContent = 'Active'; node.classList.add('active'); }
-            else if (idx === 2 && FAST_MODELS.includes(k)) { role.textContent = 'Reviewing'; node.classList.add('active'); }
-            else if (idx === 4 && k === 'gemini-pro') { role.textContent = 'Judge'; node.classList.add('active'); }
-            else if (idx === 5 && k === 'gemini-flash') { role.textContent = 'Editor'; node.classList.add('active'); }
-            else { role.textContent = 'Standby'; node.classList.remove('active'); }
-        });
-    };
-
-    const addTrace = (stage, model, content) => {
-        const entry = document.createElement('div');
-        entry.className = 'trace-entry';
-        const preview = content.length > 500 ? content.substring(0, 500) + "..." : content;
-        entry.innerHTML = `<div class="trace-stage">${stage}</div><div class="trace-model">${model}</div><div class="trace-content">${preview}</div>`;
-        document.getElementById('trace-container').appendChild(entry);
-    };
+    const startedAt = Date.now();
 
     try {
-        // ── STAGE 1: DECONSTRUCTION (Gemini 3 Flash) ──
-        updateProgress(0);
-        const s1 = await callAPI("gemini-flash",
-            `Refine this inquiry into 3 robust pillars: Core Question, Hidden Variables, Required Constraints.\n\nInquiry: ${msg}`,
-            "Strategic Analyst.", 400);
-        addTrace("Deconstruction", "Gemini 3 Flash", s1);
+        if (mode === "swift") {
+            updateProgress(0, stageLabels);
+            const s1 = await callAPI("deepseek", `Create a concise problem frame with objective, constraints, and success criteria.\n\nQuestion: ${msg}`, "Precision analyst mode.", 280);
+            addTrace("Frame", MODEL_LABELS.deepseek, s1);
 
-        // ── STAGE 2: PARALLEL PROPOSALS (Hyper-Mixed) ──
-        updateProgress(1);
-        const propResults = await Promise.allSettled(FAST_MODELS.map(m =>
-            callAPI(m, `Context: ${s1}\n\nQuestion: ${msg}\n\nPropose a direct solution (200 words).`, "Expert Consultant.", 500)
-        ));
+            updateProgress(1, stageLabels);
+            const draftModels = ["deepseek", "kimi"];
+            const draftResults = await Promise.allSettled(
+                draftModels.map((m) => callAPI(m, `Brief: ${s1}\n\nQuestion: ${msg}\n\nReturn a practical answer in <=160 words.`, "Analytical mode.", 340))
+            );
 
-        const proposals = propResults.map((r, i) => {
-            const model = FAST_MODELS[i];
-            const txt = r.status === 'fulfilled' ? r.value : "[Network Failure]";
-            addTrace("Proposal", MODEL_NAMES[model], txt);
-            return { model, text: txt };
+            const drafts = [];
+            draftResults.forEach((res, idx) => {
+                if (res.status === "fulfilled" && res.value) {
+                    drafts.push({ model: draftModels[idx], text: res.value });
+                    addTrace("Draft", MODEL_LABELS[draftModels[idx]], res.value);
+                }
+            });
+
+            if (!drafts.length) throw new Error("All draft models timed out. Retry once or switch model keys.");
+
+            updateProgress(2, stageLabels);
+            const payload = drafts.map((d) => `[${d.model}] ${d.text}`).join("\n\n");
+            const merged = await callAPI("reasoner", `Unify these responses into one action-ready answer for: ${msg}\n\n${payload}\n\nOutput: clear steps + risk note.`, "Senior synthesizer.", 520);
+            addTrace("Merge", MODEL_LABELS.reasoner, merged);
+
+            updateProgress(3, stageLabels);
+            document.getElementById("oracle-output").textContent = merged;
+            markOracleDone(((Date.now() - startedAt) / 1000).toFixed(1), mode, 4, drafts.length + 1);
+            return;
+        }
+
+        updateProgress(0, stageLabels);
+        const s1 = await callAPI("deepseek", `Deconstruct this in 4 bullets: essence, assumptions, constraints, criteria.\n\nInquiry: ${msg}`, "Surgical analyst mode.", 320);
+        addTrace("Deconstruction", MODEL_LABELS.deepseek, s1);
+
+        updateProgress(1, stageLabels);
+        const proposals = await Promise.allSettled(
+            MODELS.map((m) => callAPI(m, `Brief: ${s1}\n\nQuestion: ${msg}\n\nProvide your best answer (<=180 words).`, "Analytical mode.", 420))
+        );
+        const liveProposals = [];
+        proposals.forEach((res, idx) => {
+            if (res.status === "fulfilled") {
+                liveProposals.push({ model: MODELS[idx], text: res.value });
+                addTrace("Proposal", MODEL_LABELS[MODELS[idx]], res.value);
+            }
         });
 
-        // ── STAGE 3: BLIND CRITIQUE (Hyper-Mixed) ──
-        updateProgress(2);
-        const pSummary = proposals.map((p, i) => `Option ${chr(i)}: ${p.text.substring(0, 300)}`).join("\n\n");
+        if (liveProposals.length < 2) {
+            throw new Error("Not enough model responses in full mode. Use Swift mode for lower latency.");
+        }
 
-        const critResults = await Promise.allSettled(FAST_MODELS.map(m =>
-            callAPI(m, `Analyze these options for: ${msg}\n\n${pSummary}\n\nIdentify the single biggest flaw in each. Be ruthless.`, "Red Team.", 400)
-        ));
+        updateProgress(2, stageLabels);
+        const propSummary = liveProposals.map((p, i) => `Option ${i + 1} (${p.model}): ${p.text.slice(0, 260)}`).join("\n\n");
+        const critiques = await Promise.allSettled(
+            liveProposals.map((p) => callAPI(p.model, `Review these options for question: ${msg}\n\n${propSummary}\n\nGive one flaw and one strength per option.`, "Ruthless reviewer.", 360))
+        );
+        const critiqueText = critiques.filter((c) => c.status === "fulfilled").map((c) => c.value).join("\n\n");
+        if (!critiqueText) throw new Error("Critique stage failed. Retry or switch to Swift mode.");
+        addTrace("Critique", "Council", critiqueText);
 
-        const critiques = critResults.map((r, i) => {
-            const model = FAST_MODELS[i];
-            const txt = r.status === 'fulfilled' ? r.value : "No critique.";
-            addTrace("Critique", MODEL_NAMES[model], txt);
-            return { model, text: txt };
-        });
+        updateProgress(3, stageLabels);
+        const defenses = await Promise.allSettled(
+            liveProposals.map((p) => callAPI(p.model, `Your proposal: ${p.text}\n\nCritiques:\n${critiqueText}\n\nImprove the answer with stronger logic and clearer action.`, "Refinement mode.", 430))
+        );
+        const defensePayload = defenses
+            .map((d, i) => (d.status === "fulfilled" ? `[${liveProposals[i].model}] ${d.value}` : ""))
+            .filter(Boolean)
+            .join("\n\n");
+        if (!defensePayload) throw new Error("Defense stage failed. Retry in Swift mode.");
+        addTrace("Defense", "Council", defensePayload);
 
-        // ── STAGE 4: DEFENSE (Hyper-Mixed) ──
-        updateProgress(3);
-        const cSummary = critiques.map((c, i) => `Critic ${chr(i)}: ${c.text.substring(0, 200)}`).join("\n");
+        updateProgress(4, stageLabels);
+        const s5 = await callAPI("reasoner", `Experts refined positions on: ${msg}\n\n${defensePayload}\n\nSynthesize one final protocol with priorities and risks.`, "Senior architect.", 620);
+        addTrace("Reconciliation", MODEL_LABELS.reasoner, s5);
 
-        const defResults = await Promise.allSettled(proposals.map(p =>
-            callAPI(p.model, `Your original proposal: ${p.text.substring(0, 300)}\n\nCritiques received:\n${cSummary}\n\nUpdate your solution to address these flaws.`, "Resilient Architect.", 600)
-        ));
+        updateProgress(5, stageLabels);
+        const s6 = await callAPI("kimi", `Improve readability and remove meta-talk from this response.\n\nText:\n${s5}`, "Senior editor.", 620);
+        addTrace("Polish", MODEL_LABELS.kimi, s6);
 
-        const defenses = defResults.map((r, i) => {
-            const txt = r.status === 'fulfilled' ? r.value : "Defense failed.";
-            addTrace("Defense", MODEL_NAMES[proposals[i].model], txt);
-            return { model: proposals[i].model, text: txt };
-        });
-
-        // ── STAGE 5: RECONCILIATION (Gemini 3 Pro) ──
-        updateProgress(4);
-        const dBlock = defenses.map(d => `[${MODEL_NAMES[d.model]}]: ${d.text}`).join("\n\n");
-
-        const s5 = await callAPI("gemini-pro",
-            `Experts have debated on: ${msg}\n\nFinal Positions:\n${dBlock}\n\nSynthesize the absolute TRUTH. One cohesive protocol. No "Option A/B". Just the answer.`,
-            "Supreme Judge.", 2000);
-        addTrace("Reconciliation", "Gemini 3 Pro", s5);
-
-        // ── STAGE 6: POLISH (Gemini 3 Flash) ──
-        updateProgress(5);
-        const s6 = await callAPI("gemini-flash",
-            `Rewrite this text into a "Protocol from the Future". Use the WRITING GUIDE rules strictly. Clinically precise, authoritative. Just the raw text.\n\nText:\n${s5}`,
-            `Chief Editor. STRICT RULES:\n${WRITING_GUIDE}\nOUTPUT ONLY THE FINAL PROTOCOL text.`, 1000);
-        addTrace("Polish", "Gemini 3 Flash", s6);
-
-        // ── DONE ──
-        updateProgress(6, "Protocol Complete");
-        document.getElementById('nexus-animation').style.display = 'none';
-        document.getElementById('oracle-result').style.display = 'block';
-        document.getElementById('oracle-output').textContent = s6;
-
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        document.getElementById('result-meta').textContent = `7/7 stages · 4 models · ${elapsed}s`;
-
+        updateProgress(6, stageLabels);
+        document.getElementById("oracle-output").textContent = s6;
+        markOracleDone(((Date.now() - startedAt) / 1000).toFixed(1), mode, 7, liveProposals.length);
     } catch (e) {
-        console.error(e);
-        document.getElementById('nexus-animation').style.display = 'none';
-        alert(`Oracle Error: ${e.message}`);
+        document.getElementById("nexus-animation").style.display = "none";
+        document.getElementById("oracle-result").style.display = "block";
+        document.getElementById("oracle-output").textContent = `Oracle error: ${e.message}`;
     } finally {
+        state.oracleBusy = false;
         btn.disabled = false;
     }
 }
 
-function chr(i) { return String.fromCharCode(65 + i); }
+function renderPersonaList() {
+    const container = document.getElementById("council-persona-list");
+    container.innerHTML = "";
 
-// ─── COUNCIL HALL ─────────────────────────────────────────────────────────────
-
-async function initCouncil() {
-    console.log("Initializing Council...");
-    const list = document.getElementById('council-persona-list');
-    if (!list) { console.error("Missing council-persona-list"); return; }
-
-    list.innerHTML = '';
-    Object.keys(PERSONAS).forEach(key => {
-        const p = PERSONAS[key];
-        const el = document.createElement('div');
-        el.className = 'persona-card';
-        el.innerHTML = `<strong>${p.name}</strong><br><small>${p.role}</small>`;
-        el.onclick = () => selectPersona(key, el);
-        list.appendChild(el);
+    Object.entries(state.personas).forEach(([id, p]) => {
+        const button = document.createElement("button");
+        button.className = `selector-btn ${state.selectedPersona === id ? "active" : ""}`;
+        button.type = "button";
+        button.innerHTML = `<span class=\"selector-title\">${p.name}</span><span class=\"selector-sub\">${p.role}</span>`;
+        button.onclick = () => {
+            state.selectedPersona = id;
+            renderPersonaList();
+            clearChat("council-chat-history", `Connected to ${p.name}. Ask your question.`);
+            document.getElementById("council-status").textContent = `Linked: ${p.name}`;
+        };
+        container.appendChild(button);
     });
 }
 
-function selectPersona(key, el) {
-    selectedPersona = key;
-    document.querySelectorAll('.persona-card').forEach(c => c.classList.remove('active'));
-    el.classList.add('active');
-    document.getElementById('council-chat-history').innerHTML = `<div class="bubble ai">Ready. I am ${PERSONAS[key].name}.</div>`;
+function renderModelList() {
+    const container = document.getElementById("chat-model-list");
+    container.innerHTML = "";
+
+    MODELS.forEach((m) => {
+        const button = document.createElement("button");
+        button.className = `selector-btn ${state.selectedDirectModel === m ? "active" : ""}`;
+        button.type = "button";
+        button.innerHTML = `<span class=\"selector-title\">${MODEL_LABELS[m]}</span><span class=\"selector-sub\">Direct channel</span>`;
+        button.onclick = () => {
+            state.selectedDirectModel = m;
+            renderModelList();
+            redrawDirectHistory();
+        };
+        container.appendChild(button);
+    });
+}
+
+function redrawDirectHistory() {
+    const container = document.getElementById("chat-history");
+    container.innerHTML = "";
+    const history = state.directHistoryByModel[state.selectedDirectModel] || [];
+
+    if (!history.length) {
+        appendBubble("chat-history", "ai", `Connected to ${MODEL_LABELS[state.selectedDirectModel]}.`);
+        return;
+    }
+
+    history.forEach((item) => appendBubble("chat-history", item.role, item.content, item.meta || ""));
 }
 
 async function sendCouncilMessage() {
-    if (!selectedPersona) { alert('Select a persona first.'); return; }
-    const input = document.getElementById('council-input');
-    const msg = input.value.trim();
-    if (!msg) return;
-    input.value = '';
+    const input = document.getElementById("council-input");
+    const text = input.value.trim();
+    if (!text) return;
+    if (!state.selectedPersona) {
+        alert("Select a persona first.");
+        return;
+    }
 
-    const chat = document.getElementById('council-chat-history');
-    chat.innerHTML += `<div class="bubble user">${msg}</div>`;
-    chat.innerHTML += `<div class="bubble ai" id="council-loading">Thinking...</div>`;
-    chat.scrollTop = chat.scrollHeight;
+    input.value = "";
+    appendBubble("council-chat-history", "user", text);
+
+    const persona = state.personas[state.selectedPersona];
+    document.getElementById("council-status").textContent = "Thinking...";
+
+    const historyTail = state.councilHistory.slice(-6).map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n");
+    const prompt = historyTail ? `${historyTail}\nUSER: ${text}` : text;
 
     try {
-        const persona = PERSONAS[selectedPersona];
-        // Use Gemini Flash for Council (Fast)
-        const reply = await callAPI("gemini-flash", msg, persona.system, 1500);
-        document.getElementById('council-loading').outerHTML = `<div class="bubble ai"><strong>${persona.name}:</strong><br>${reply}</div>`;
+        const response = await callAPI(persona.preferred_model || "deepseek", prompt, persona.system_prompt, 620);
+        appendBubble("council-chat-history", "ai", response, persona.name);
+
+        state.councilHistory.push({ role: "user", content: text });
+        state.councilHistory.push({ role: "ai", content: response });
+        state.councilHistory = state.councilHistory.slice(-20);
+
+        document.getElementById("council-status").textContent = `Ready: ${persona.name}`;
     } catch (e) {
-        document.getElementById('council-loading').outerHTML = `<div class="bubble ai">Error: ${e.message}</div>`;
+        appendBubble("council-chat-history", "ai", `Error: ${e.message}`, "System");
+        document.getElementById("council-status").textContent = "Error";
     }
-    chat.scrollTop = chat.scrollHeight;
-}
-
-// ─── DIRECT UPLINK ────────────────────────────────────────────────────────────
-
-async function initDirect() {
-    console.log("Initializing Direct Uplink...");
-    const list = document.getElementById('chat-model-list');
-    if (!list) { console.error("Missing chat-model-list"); return; }
-
-    list.innerHTML = '';
-    MODELS.forEach(m => {
-        const el = document.createElement('div');
-        el.className = 'model-chip';
-        el.textContent = MODEL_NAMES[m];
-        el.onclick = () => selectModel(m, el);
-        list.appendChild(el);
-    });
-}
-
-function selectModel(m, el) {
-    selectedModel = m;
-    document.querySelectorAll('.model-chip').forEach(c => c.classList.remove('active'));
-    el.classList.add('active');
-    document.getElementById('chat-history').innerHTML = `<div class="bubble ai">Uplink established with ${MODEL_NAMES[m]}.</div>`;
 }
 
 async function sendDirectMessage() {
-    if (!selectedModel) { alert('Select a model first.'); return; }
-    const input = document.getElementById('chat-input');
-    const msg = input.value.trim();
-    if (!msg) return;
-    input.value = '';
+    const input = document.getElementById("chat-input");
+    const text = input.value.trim();
+    if (!text) return;
 
-    const chat = document.getElementById('chat-history');
-    chat.innerHTML += `<div class="bubble user">${msg}</div>`;
-    chat.innerHTML += `<div class="bubble ai" id="direct-loading">Processing...</div>`;
-    chat.scrollTop = chat.scrollHeight;
+    const model = state.selectedDirectModel;
+    input.value = "";
+    appendBubble("chat-history", "user", text);
+    state.directHistoryByModel[model].push({ role: "user", content: text });
+
+    const history = state.directHistoryByModel[model].slice(-8);
+    const prompt = history.map((h) => `${h.role.toUpperCase()}: ${h.content}`).join("\n");
 
     try {
-        const reply = await callAPI(selectedModel, msg, `You are a helpful, precise assistant. Follow these rules strictly:\n${WRITING_GUIDE}`, 2000);
-        document.getElementById('direct-loading').outerHTML = `<div class="bubble ai">${reply}</div>`;
+        const reply = await callAPI(model, prompt, "Direct answer mode. Be concise but complete.", 700);
+        state.directHistoryByModel[model].push({ role: "ai", content: reply, meta: MODEL_LABELS[model] });
+        redrawDirectHistory();
     } catch (e) {
-        document.getElementById('direct-loading').outerHTML = `<div class="bubble ai">Error: ${e.message}</div>`;
+        appendBubble("chat-history", "ai", `Error: ${e.message}`, "System");
     }
-    chat.scrollTop = chat.scrollHeight;
 }
 
-// ─── NAVIGATION ───────────────────────────────────────────────────────────────
-
-function switchTab(id) {
-    document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll(`.nav-link[data-tab="${id}"]`).forEach(el => el.classList.add('active'));
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-    const target = document.getElementById(`tab-${id}`);
-    if (target) target.classList.add('active');
+async function loadPersonas() {
+    try {
+        const res = await fetch(`${API_BASE}/data/council_personas.json`);
+        if (res.ok) {
+            state.personas = await res.json();
+        } else {
+            state.personas = FALLBACK_PERSONAS;
+        }
+    } catch (_e) {
+        state.personas = FALLBACK_PERSONAS;
+    }
+    state.selectedPersona = Object.keys(state.personas)[0] || null;
 }
 
-function toggleTrace() {
-    const el = document.getElementById('trace-container');
-    el.style.display = el.style.display === 'none' ? 'block' : 'none';
-}
-
-// ─── INIT ─────────────────────────────────────────────────────────────────────
-
-window.addEventListener('DOMContentLoaded', () => {
-    switchTab('home');
-    initCouncil();
-    initDirect();
-});
-
-// Expose to global scope for inline onclick handlers
 window.runOracle = runOracle;
 window.switchTab = switchTab;
 window.toggleTrace = toggleTrace;
 window.sendCouncilMessage = sendCouncilMessage;
 window.sendDirectMessage = sendDirectMessage;
+
+window.addEventListener("DOMContentLoaded", async () => {
+    switchTab("home");
+    renderModelList();
+    redrawDirectHistory();
+
+    await loadPersonas();
+    renderPersonaList();
+    const firstPersona = state.personas[state.selectedPersona];
+    if (firstPersona) {
+        clearChat("council-chat-history", `Connected to ${firstPersona.name}. Ask your question.`);
+        document.getElementById("council-status").textContent = `Linked: ${firstPersona.name}`;
+    }
+});

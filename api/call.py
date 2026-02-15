@@ -2,6 +2,8 @@ from http.server import BaseHTTPRequestHandler
 import json
 import os
 import re
+import time
+
 import requests as http
 
 MODELS = {
@@ -9,126 +11,141 @@ MODELS = {
         "name": "DeepSeek V3.2",
         "model_id": "deepseek-ai/deepseek-v3.2",
         "api_key": os.environ.get("DEEPSEEK_NVIDIA_API_KEY"),
-        "base_url": "https://integrate.api.nvidia.com/v1"
+        "base_url": "https://integrate.api.nvidia.com/v1",
     },
     "kimi": {
         "name": "Kimi K2.5",
         "model_id": "moonshotai/kimi-k2.5",
         "api_key": os.environ.get("KIMI_API_KEY"),
-        "base_url": "https://integrate.api.nvidia.com/v1"
+        "base_url": "https://integrate.api.nvidia.com/v1",
     },
     "minimax": {
         "name": "Minimax M2.1",
         "model_id": "minimaxai/minimax-m2.1",
         "api_key": os.environ.get("MINIMAX_API_KEY"),
-        "base_url": "https://integrate.api.nvidia.com/v1"
+        "base_url": "https://integrate.api.nvidia.com/v1",
     },
     "reasoner": {
         "name": "DeepSeek Reasoner",
         "model_id": "deepseek-reasoner",
         "api_key": os.environ.get("DEEPSEEK_REASONER_API_KEY"),
-        "base_url": "https://api.deepseek.com/v1"
+        "base_url": "https://api.deepseek.com/v1",
     },
 }
+
+MODEL_ALIASES = {
+    "deepseek_reasoner": "reasoner",
+    "deepseek-reasoner": "reasoner",
+}
+
+MAX_PROMPT_CHARS = 16000
+MIN_TOKENS = 64
+MAX_TOKENS = 1200
+MAX_RETRIES = 2
+REQUEST_TIMEOUT = (4, 16)
+
+
+def _safe_int(v, fallback):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _extract_text(data):
+    message = data.get("choices", [{}])[0].get("message", {})
+    text = message.get("content") or message.get("reasoning_content") or ""
+    return re.sub(r"<(think|thought)>[\s\S]*?</\1>\s*", "", text, flags=re.IGNORECASE).strip()
+
 
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
     def do_POST(self):
-        length = int(self.headers.get('Content-Length', 0))
-        body = json.loads(self.rfile.read(length)) if length else {}
+        try:
+            length = _safe_int(self.headers.get("Content-Length", 0), 0)
+            raw = self.rfile.read(length) if length else b"{}"
+            body = json.loads(raw)
+        except json.JSONDecodeError:
+            return self._json(400, {"error": "Invalid JSON body."})
 
-        mk = body.get('model')
-        prompt = body.get('prompt', '')
-        system = body.get('system', 'You are a helpful assistant.')
-        max_tokens = body.get('max_tokens', 1000)
+        model_key = (body.get("model") or "").strip().lower()
+        model_key = MODEL_ALIASES.get(model_key, model_key)
 
-        # ─── GEMINI HANDLER ──────────────────────────────────────────────────
-        if mk and mk.startswith("gemini"):
-            # Hardcoded key as per user instruction
-            api_key = "[REDACTED]"
-            
-            # Map simplified names to real model IDs
-            # Restoring Gemini 3 as per user request. Fallback to 2.5 then 2.0.
-            real_model = "gemini-3-flash-preview" 
-            if "flash" in mk: real_model = "gemini-3-flash-preview"
-            elif "pro" in mk: real_model = "gemini-3-pro-preview"
+        config = MODELS.get(model_key)
+        if not config:
+            return self._json(400, {"error": "Unsupported model."})
+        if not config.get("api_key"):
+            return self._json(400, {"error": f"Model {model_key} is not configured."})
 
+        prompt = (body.get("prompt") or "").strip()
+        if not prompt:
+            return self._json(400, {"error": "Prompt is required."})
+        if len(prompt) > MAX_PROMPT_CHARS:
+            return self._json(400, {"error": f"Prompt too long (>{MAX_PROMPT_CHARS} chars)."})
 
-            
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{real_model}:generateContent?key={api_key}"
-            
-            g_payload = {
-                "contents": [{
-                    "parts": [{"text": f"{system}\n\n{prompt}"}] 
-                }],
-                "generationConfig": {
-                    "temperature": 0.7,
-                    "maxOutputTokens": max_tokens
-                }
-            }
-            
-            try:
-                resp = http.post(url, json=g_payload, headers={'Content-Type': 'application/json'}, timeout=55)
-                
-                # Fallback logic if 'gemini-3-flash-preview' fails (sometimes preview names change)
-                if resp.status_code == 404 or resp.status_code == 400:
-                    fallback = "gemini-2.0-flash"
-                    print(f"Gemini 3 model {real_model} error {resp.status_code}, strictly falling back to {fallback}")
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{fallback}:generateContent?key={api_key}"
-                    resp = http.post(url, json=g_payload, headers={'Content-Type': 'application/json'}, timeout=55)
+        system = (body.get("system") or "You are a helpful assistant.").strip()
+        max_tokens = _safe_int(body.get("max_tokens", 700), 700)
+        max_tokens = max(MIN_TOKENS, min(MAX_TOKENS, max_tokens))
 
-                resp.raise_for_status()
-                result = resp.json()
-                # Safe extraction of text
-                text = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', '')
-                if not text:
-                    text = "[Gemini Error: No text returned. Check API quotas.]"
-                
-                return self._json(200, {"text": text})
-
-            except Exception as e:
-                return self._json(500, {"error": f"Gemini Error: {str(e)}"})
-
-        # ─── EXISTING HANDLER (DeepSeek/Minimax) ─────────────────────────────
-        config = MODELS.get(body.get('model'))
-        if not config or not config.get('api_key'):
-            return self._json(400, {"error": f"Model {mk} not configured"})
-
-        url = f"{config['base_url']}/chat/completions"
         headers = {
             "Authorization": f"Bearer {config['api_key']}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
         payload = {
             "model": config["model_id"],
             "messages": [
                 {"role": "system", "content": system},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
             "max_tokens": max_tokens,
-            "temperature": 0.6
+            "temperature": 0.55,
         }
 
-        try:
-            resp = http.post(url, headers=headers, json=payload, timeout=55)
-            resp.raise_for_status()
-            data = resp.json()
-            msg = data.get("choices", [{}])[0].get("message", {})
-            text = msg.get("content") or msg.get("reasoning_content") or ""
-            text = re.sub(r'<(think|thought)>[\s\S]*?</\1>\s*', '', text, flags=re.IGNORECASE).strip()
-            return self._json(200, {"text": text})
-        except Exception as e:
-            return self._json(500, {"error": str(e)})
+        url = f"{config['base_url']}/chat/completions"
+        last_error = None
+
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                response = http.post(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+
+                if response.status_code in (408, 409, 429, 500, 502, 503, 504):
+                    last_error = f"upstream {response.status_code}"
+                    if attempt < MAX_RETRIES:
+                        time.sleep(0.6 * (attempt + 1))
+                        continue
+
+                response.raise_for_status()
+                data = response.json()
+                text = _extract_text(data)
+                return self._json(200, {"text": text})
+            except (http.exceptions.Timeout, http.exceptions.ConnectionError):
+                last_error = "provider timeout"
+                if attempt < MAX_RETRIES:
+                    time.sleep(0.5 * (attempt + 1))
+                    continue
+            except (http.exceptions.HTTPError, ValueError):
+                last_error = "upstream response error"
+                if attempt < MAX_RETRIES:
+                    time.sleep(0.5 * (attempt + 1))
+                    continue
+                break
+            except Exception:
+                last_error = "internal request error"
+                break
+
+        return self._json(502, {"error": f"Model request failed ({last_error})."})
 
     def _json(self, code, data):
         self.send_response(code)
-        self.send_header('Content-Type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(json.dumps(data).encode())
+        self.wfile.write(json.dumps(data).encode("utf-8"))
