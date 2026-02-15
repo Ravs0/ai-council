@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Oracle Protocol | Multi-Model Adversarial Consensus</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,10 +19,18 @@
     <aside class="sidebar">
         <div class="sidebar-logo">ORACLE</div>
         <nav class="sidebar-nav">
-            <button class="nav-link active" data-tab="home" onclick="switchTab('home')">Command</button>
-            <button class="nav-link" data-tab="oracle" onclick="switchTab('oracle')">Oracle Lab</button>
-            <button class="nav-link" data-tab="council" onclick="switchTab('council')">Council Hall</button>
-            <button class="nav-link" data-tab="chat" onclick="switchTab('chat')">Direct Uplink</button>
+            <button class="nav-link active" data-tab="home" onclick="switchTab('home')">
+                <span class="nav-icon">◉</span> Command
+            </button>
+            <button class="nav-link" data-tab="oracle" onclick="switchTab('oracle')">
+                <span class="nav-icon">⌬</span> Oracle
+            </button>
+            <button class="nav-link" data-tab="council" onclick="switchTab('council')">
+                <span class="nav-icon">⚖️</span> Council
+            </button>
+            <button class="nav-link" data-tab="chat" onclick="switchTab('chat')">
+                <span class="nav-icon">💬</span> Chat
+            </button>
         </nav>
         <div class="sidebar-footer">
             <div class="engine-badge">4 Engines Online</div>
