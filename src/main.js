@@ -85,8 +85,9 @@ async function runOracle() {
 
     const startTime = Date.now();
 
-    // FAST TRACK MODELS (No Reasoner here - too slow. No Minimax - API unstable)
-    const FAST_MODELS = ["deepseek", "kimi"];
+    // FAST TRACK MODELS (No Reasoner here - too slow)
+    // We use DeepSeek V3, Kimi, Minimax for proposal/critique/defense loops.
+    const FAST_MODELS = ["deepseek", "kimi", "minimax"];
 
     const updateProgress = (idx, labelOverride = null) => {
         document.querySelectorAll('.stage-item').forEach((el, i) => {
