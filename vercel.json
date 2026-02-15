@@ -1,0 +1,7 @@
+{
+    "functions": {
+        "api/call.py": {
+            "maxDuration": 60
+        }
+    }
+}

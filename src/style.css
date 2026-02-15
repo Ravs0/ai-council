@@ -637,3 +637,36 @@ p.lead {
     background: var(--border);
     border-radius: 3px;
 }
+
+/* Persona / Model List Items */
+.persona-item {
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    margin-bottom: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary);
+    transition: var(--transition);
+}
+
+.persona-item:hover {
+    background: var(--bg-elevated);
+    border-color: var(--border-active);
+    color: var(--text-primary);
+}
+
+.persona-item.active {
+    background: var(--text-primary);
+    color: var(--bg-deep);
+    border-color: var(--text-primary);
+}
+
+.persona-item small {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.persona-item.active small {
+    color: var(--bg-elevated);
+}
