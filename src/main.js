@@ -55,6 +55,8 @@ async function callAPI(model, prompt, system = "", maxTokens = 1000) {
 
 // ─── ORACLE PROTOCOL ─────────────────────────────────────────────────────────
 
+// ─── ORACLE PROTOCOL (OPTIMIZED) ─────────────────────────────────────────────
+
 async function runOracle() {
     const input = document.getElementById('oracle-input');
     const msg = input.value.trim();
@@ -63,6 +65,7 @@ async function runOracle() {
     const btn = document.getElementById('oracle-run-btn');
     btn.disabled = true;
 
+    // UI Reset
     document.getElementById('stage-tracker').style.display = 'flex';
     document.getElementById('nexus-animation').style.display = 'flex';
     document.getElementById('oracle-result').style.display = 'none';
@@ -70,118 +73,131 @@ async function runOracle() {
 
     const startTime = Date.now();
 
-    const updateProgress = (idx) => {
+    // FAST TRACK MODELS (No Reasoner here - too slow)
+    // We use DeepSeek V3, Kimi, Minimax for proposal/critique/defense loops.
+    const FAST_MODELS = ["deepseek", "kimi", "minimax"];
+
+    const updateProgress = (idx, labelOverride = null) => {
         document.querySelectorAll('.stage-item').forEach((el, i) => {
             el.classList.remove('active');
             if (i < idx) el.classList.add('done');
         });
         const s = document.getElementById(`s${idx + 1}`);
         if (s) s.classList.add('active');
-        document.getElementById('nexus-label').textContent = STAGE_LABELS[idx];
 
-        // Update engine roles
-        const roles = [
-            { deepseek: 'Analyzing', kimi: 'Standby', reasoner: 'Standby', minimax: 'Standby' },
-            { deepseek: 'Proposing', kimi: 'Proposing', reasoner: 'Proposing', minimax: 'Proposing' },
-            { deepseek: 'Reviewing', kimi: 'Reviewing', reasoner: 'Reviewing', minimax: 'Reviewing' },
-            { deepseek: 'Defending', kimi: 'Defending', reasoner: 'Defending', minimax: 'Defending' },
-            { deepseek: 'Standby', kimi: 'Standby', reasoner: 'Reconciling', minimax: 'Standby' },
-            { deepseek: 'Standby', kimi: 'Polishing', reasoner: 'Standby', minimax: 'Standby' },
-            { deepseek: 'Done', kimi: 'Done', reasoner: 'Done', minimax: 'Done' },
-        ];
-        if (idx < roles.length) {
-            const r = roles[idx];
-            ['deepseek', 'kimi', 'reasoner', 'minimax'].forEach(k => {
-                const roleEl = document.getElementById(`role-${k}`);
-                const nodeEl = document.getElementById(`node-${k}`);
-                if (roleEl) roleEl.textContent = r[k];
-                if (nodeEl) nodeEl.classList.toggle('active', r[k] !== 'Standby' && r[k] !== 'Done');
-            });
-        }
+        const label = labelOverride || STAGE_LABELS[idx];
+        document.getElementById('nexus-label').textContent = label;
+
+        // Update Grid Status
+        ['deepseek', 'kimi', 'minimax', 'reasoner'].forEach(k => {
+            const node = document.getElementById(`node-${k}`);
+            const role = document.getElementById(`role-${k}`);
+            if (!node || !role) return;
+
+            // Visual Logic
+            if (idx === 0 && k === 'deepseek') { role.textContent = 'Analyst'; node.classList.add('active'); }
+            else if ((idx === 1 || idx === 3) && FAST_MODELS.includes(k)) { role.textContent = 'Active'; node.classList.add('active'); }
+            else if (idx === 2 && FAST_MODELS.includes(k)) { role.textContent = 'Reviewing'; node.classList.add('active'); }
+            else if (idx === 4 && k === 'reasoner') { role.textContent = 'Judge'; node.classList.add('active'); }
+            else if (idx === 5 && k === 'kimi') { role.textContent = 'Editor'; node.classList.add('active'); }
+            else { role.textContent = 'Standby'; node.classList.remove('active'); }
+        });
     };
 
     const addTrace = (stage, model, content) => {
         const entry = document.createElement('div');
         entry.className = 'trace-entry';
-        entry.innerHTML = `<div class="trace-stage">${stage}</div><div class="trace-model">${model}</div><div class="trace-content">${content.substring(0, 500)}...</div>`;
+        const preview = content.length > 500 ? content.substring(0, 500) + "..." : content;
+        entry.innerHTML = `<div class="trace-stage">${stage}</div><div class="trace-model">${model}</div><div class="trace-content">${preview}</div>`;
         document.getElementById('trace-container').appendChild(entry);
     };
 
     try {
-        // S1: Deconstruct
+        // ── STAGE 1: DECONSTRUCTION (DeepSeek V3) ──
         updateProgress(0);
         const s1 = await callAPI("deepseek",
-            `Deconstruct: ${msg}\n\n4 bullets: essence, assumptions, constraints, success criteria.`,
-            "Surgical analyst.", 400);
-        addTrace("Deconstruction", "DeepSeek V3.2", s1);
+            `Refine this inquiry into 3 robust pillars: Core Question, Hidden Variables, Required Constraints.\n\nInquiry: ${msg}`,
+            "Strategic Analyst.", 400);
+        addTrace("Deconstruction", "DeepSeek V3", s1);
 
-        // S2: Proposals (sequential to avoid parallel timeout issues)
+        // ── STAGE 2: PARALLEL PROPOSALS (Fast Models) ──
         updateProgress(1);
-        const proposals = [];
-        for (const m of MODELS) {
-            const txt = await callAPI(m,
-                `Brief: ${s1.substring(0, 300)}\n\nQuestion: ${msg}\n\nBest answer in 200 words.`,
-                "Expert mode.", 500);
-            addTrace("Proposal", MODEL_NAMES[m], txt);
-            proposals.push({ model: m, text: txt });
-        }
+        // Execute in PARALLEL because these are fast models (<10s each).
+        const propResults = await Promise.allSettled(FAST_MODELS.map(m =>
+            callAPI(m, `Context: ${s1}\n\nQuestion: ${msg}\n\nPropose a direct solution (200 words).`, "Expert Consultant.", 500)
+        ));
 
-        // S3: Critique (sequential)
+        const proposals = propResults.map((r, i) => {
+            const model = FAST_MODELS[i];
+            const txt = r.status === 'fulfilled' ? r.value : "[Network Failure]";
+            addTrace("Proposal", MODEL_NAMES[model], txt);
+            return { model, text: txt };
+        });
+
+        // ── STAGE 3: BLIND CRITIQUE (Fast Models) ──
         updateProgress(2);
-        const propSum = proposals.map((p, i) => `${chr(i)}: ${p.text.substring(0, 250)}`).join("\n\n");
-        const critiques = [];
-        for (const m of MODELS) {
-            const txt = await callAPI(m,
-                `Review for: ${msg}\n\n${propSum}\n\n1 flaw, 1 strength each. 100 words.`,
-                "Ruthless reviewer.", 300);
-            addTrace("Critique", MODEL_NAMES[m], txt);
-            critiques.push({ model: m, text: txt });
-        }
+        const pSummary = proposals.map((p, i) => `Option ${chr(i)}: ${p.text.substring(0, 300)}`).join("\n\n");
 
-        // S4: Defense (sequential)
+        // Parallel Critique
+        const critResults = await Promise.allSettled(FAST_MODELS.map(m =>
+            callAPI(m, `Analyze these options for: ${msg}\n\n${pSummary}\n\nIdentify the single biggest flaw in each. Be ruthless.`, "Red Team.", 400)
+        ));
+
+        const critiques = critResults.map((r, i) => {
+            const model = FAST_MODELS[i];
+            const txt = r.status === 'fulfilled' ? r.value : "No critique.";
+            addTrace("Critique", MODEL_NAMES[model], txt);
+            return { model, text: txt };
+        });
+
+        // ── STAGE 4: DEFENSE (Fast Models) ──
         updateProgress(3);
-        const cSum = critiques.map((c, i) => `Peer ${chr(i)}: ${c.text.substring(0, 150)}`).join("\n");
-        const defenses = [];
-        for (const p of proposals) {
-            const txt = await callAPI(p.model,
-                `Your proposal: ${p.text.substring(0, 250)}\n\nCritiques:\n${cSum}\n\nImprove. 200 words.`,
-                "Refinement mode.", 500);
-            addTrace("Defense", MODEL_NAMES[p.model], txt);
-            defenses.push({ model: p.model, text: txt });
-        }
+        const cSummary = critiques.map((c, i) => `Critic ${chr(i)}: ${c.text.substring(0, 200)}`).join("\n");
 
-        // S5: Reconcile
+        // Parallel Defense
+        const defResults = await Promise.allSettled(proposals.map(p =>
+            callAPI(p.model, `Your original proposal: ${p.text.substring(0, 300)}\n\nCritiques received:\n${cSummary}\n\nUpdate your solution to address these flaws.`, "Resilient Architect.", 600)
+        ));
+
+        const defenses = defResults.map((r, i) => {
+            const txt = r.status === 'fulfilled' ? r.value : "Defense failed.";
+            addTrace("Defense", MODEL_NAMES[proposals[i].model], txt);
+            return { model: proposals[i].model, text: txt };
+        });
+
+        // ── STAGE 5: RECONCILIATION (DeepSeek Reasoner - The Heavy Lifter) ──
         updateProgress(4);
-        const dBlock = defenses.map(d => `[${MODEL_NAMES[d.model]}]: ${d.text.substring(0, 350)}`).join("\n\n");
+        const dBlock = defenses.map(d => `[${MODEL_NAMES[d.model]}]: ${d.text}`).join("\n\n");
+
+        // This is the ONLY slow call allowed. 60s max.
         const s5 = await callAPI("reasoner",
-            `Refined positions on: ${msg}\n\n${dBlock}\n\nSynthesize ONE final protocol. 400 words.`,
-            "Senior Consensus Architect.", 800);
+            `Experts have debated on: ${msg}\n\nFinal Positions:\n${dBlock}\n\nSynthesize the absolute TRUTH. One cohesive protocol. No "Option A/B". Just the answer.`,
+            "Supreme Judge.", 1000);
         addTrace("Reconciliation", "DeepSeek Reasoner", s5);
 
-        // S6: Polish
+        // ── STAGE 6: POLISH (Kimi) ──
         updateProgress(5);
         const s6 = await callAPI("kimi",
-            `Strip all meta-talk, markdown, bolding. Clinical prose only.\n\n${s5}`,
-            "Senior Editor. Output clean text ONLY.", 1000);
+            `Rewrite this text to be clinically precise, authoritative, and stripped of all meta-commentary ("Here is the answer"). Just the raw protocol.\n\nText:\n${s5}`,
+            "Chief Editor.", 1000);
         addTrace("Polish", "Kimi K2.5", s6);
 
-        // Done
-        updateProgress(6);
+        // ── DONE ──
+        updateProgress(6, "Protocol Complete");
         document.getElementById('nexus-animation').style.display = 'none';
         document.getElementById('oracle-result').style.display = 'block';
         document.getElementById('oracle-output').textContent = s6;
+
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
         document.getElementById('result-meta').textContent = `7/7 stages · 4 models · ${elapsed}s`;
 
     } catch (e) {
         console.error(e);
         document.getElementById('nexus-animation').style.display = 'none';
-        document.getElementById('oracle-result').style.display = 'block';
-        document.getElementById('oracle-output').textContent = `Error: ${e.message}`;
-        document.getElementById('result-meta').textContent = 'Protocol interrupted';
+        alert(`Oracle Error: ${e.message}`);
+    } finally {
+        btn.disabled = false;
     }
-
-    btn.disabled = false;
 }
 
 function chr(i) { return String.fromCharCode(65 + i); }
