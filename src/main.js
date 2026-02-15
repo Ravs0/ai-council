@@ -2,11 +2,11 @@ import './style.css';
 
 const API_BASE = window.location.origin;
 
-const MODELS = ["deepseek", "kimi", "minimax", "reasoner", "gemini-flash", "gemini-pro"];
+// REMOVED Minimax. RESTORED DeepSeek/Kimi. ADDED Gemini.
+const MODELS = ["deepseek", "kimi", "reasoner", "gemini-flash", "gemini-pro"];
 const MODEL_NAMES = {
     deepseek: "DeepSeek V3.2",
     kimi: "Kimi K2.5",
-    minimax: "Minimax M2.1",
     reasoner: "DeepSeek Reasoner",
     "gemini-flash": "Gemini 3 Flash",
     "gemini-pro": "Gemini 3 Pro"
@@ -86,8 +86,8 @@ async function runOracle() {
 
     const startTime = Date.now();
 
-    // FAST TRACK MODELS (Gemini 3 Flash + Kimi)
-    const FAST_MODELS = ["gemini-flash", "kimi"];
+    // FAST TRACK MODELS: Hybrid Mix (DeepSeek + Kimi + Gemini Flash)
+    const FAST_MODELS = ["deepseek", "kimi", "gemini-flash"];
 
     const updateProgress = (idx, labelOverride = null) => {
         document.querySelectorAll('.stage-item').forEach((el, i) => {
@@ -101,7 +101,7 @@ async function runOracle() {
         document.getElementById('nexus-label').textContent = label;
 
         // Update Grid Status
-        ['deepseek', 'kimi', 'minimax', 'reasoner', 'gemini-flash', 'gemini-pro'].forEach(k => {
+        ['deepseek', 'kimi', 'reasoner', 'gemini-flash', 'gemini-pro'].forEach(k => {
             const node = document.getElementById(`node-${k}`);
             const role = document.getElementById(`role-${k}`);
             if (!node || !role) return;
@@ -132,7 +132,7 @@ async function runOracle() {
             "Strategic Analyst.", 400);
         addTrace("Deconstruction", "Gemini 3 Flash", s1);
 
-        // ── STAGE 2: PARALLEL PROPOSALS (Fast Models) ──
+        // ── STAGE 2: PARALLEL PROPOSALS (Hyper-Mixed) ──
         updateProgress(1);
         const propResults = await Promise.allSettled(FAST_MODELS.map(m =>
             callAPI(m, `Context: ${s1}\n\nQuestion: ${msg}\n\nPropose a direct solution (200 words).`, "Expert Consultant.", 500)
@@ -145,7 +145,7 @@ async function runOracle() {
             return { model, text: txt };
         });
 
-        // ── STAGE 3: BLIND CRITIQUE (Fast Models) ──
+        // ── STAGE 3: BLIND CRITIQUE (Hyper-Mixed) ──
         updateProgress(2);
         const pSummary = proposals.map((p, i) => `Option ${chr(i)}: ${p.text.substring(0, 300)}`).join("\n\n");
 
@@ -160,7 +160,7 @@ async function runOracle() {
             return { model, text: txt };
         });
 
-        // ── STAGE 4: DEFENSE (Fast Models) ──
+        // ── STAGE 4: DEFENSE (Hyper-Mixed) ──
         updateProgress(3);
         const cSummary = critiques.map((c, i) => `Critic ${chr(i)}: ${c.text.substring(0, 200)}`).join("\n");
 
@@ -197,7 +197,7 @@ async function runOracle() {
         document.getElementById('oracle-output').textContent = s6;
 
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        document.getElementById('result-meta').textContent = `7/7 stages · Gemini 3 Powered · ${elapsed}s`;
+        document.getElementById('result-meta').textContent = `7/7 stages · 4 models · ${elapsed}s`;
 
     } catch (e) {
         console.error(e);
@@ -246,7 +246,8 @@ async function sendCouncilMessage() {
 
     try {
         const persona = PERSONAS[selectedPersona];
-        const reply = await callAPI("gemini-pro", msg, persona.system, 1500);
+        // Use Gemini Flash for Council (Fast)
+        const reply = await callAPI("gemini-flash", msg, persona.system, 1500);
         document.getElementById('council-loading').outerHTML = `<div class="bubble ai"><strong>${persona.name}:</strong><br>${reply}</div>`;
     } catch (e) {
         document.getElementById('council-loading').outerHTML = `<div class="bubble ai">Error: ${e.message}</div>`;
