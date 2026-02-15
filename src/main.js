@@ -100,6 +100,16 @@ async function callAPI(model, prompt, system = "", maxTokens = 700, timeoutMs = 
     }
 }
 
+async function callWithFallback(primaryModel, fallbackModel, prompt, system, maxTokens, timeoutMs = 22000) {
+    try {
+        const text = await callAPI(primaryModel, prompt, system, maxTokens, timeoutMs);
+        return { model: primaryModel, text };
+    } catch (_primaryError) {
+        const text = await callAPI(fallbackModel, prompt, system, maxTokens, timeoutMs);
+        return { model: fallbackModel, text };
+    }
+}
+
 function appendBubble(containerId, role, content, meta = "") {
     const container = document.getElementById(containerId);
     const bubble = document.createElement("div");
@@ -230,11 +240,17 @@ async function runOracle() {
 
             updateProgress(2, stageLabels);
             const payload = drafts.map((d) => `[${d.model}] ${d.text}`).join("\n\n");
-            const merged = await callAPI("gemini-pro", `Unify these responses into one action-ready answer for: ${msg}\n\n${payload}\n\nOutput: clear steps + risk note.`, "Senior synthesizer.", 520);
-            addTrace("Merge", MODEL_LABELS["gemini-pro"], merged);
+            const mergedResult = await callWithFallback(
+                "gemini-pro",
+                "reasoner",
+                `Unify these responses into one action-ready answer for: ${msg}\n\n${payload}\n\nOutput: clear steps + risk note.`,
+                "Senior synthesizer.",
+                520
+            );
+            addTrace("Merge", MODEL_LABELS[mergedResult.model], mergedResult.text);
 
             updateProgress(3, stageLabels);
-            document.getElementById("oracle-output").textContent = merged;
+            document.getElementById("oracle-output").textContent = mergedResult.text;
             markOracleDone(((Date.now() - startedAt) / 1000).toFixed(1), mode, 4, drafts.length + 1);
             return;
         }
@@ -280,11 +296,17 @@ async function runOracle() {
         addTrace("Defense", "Council", defensePayload);
 
         updateProgress(4, stageLabels);
-        const s5 = await callAPI("gemini-pro", `Experts refined positions on: ${msg}\n\n${defensePayload}\n\nSynthesize one final protocol with priorities and risks.`, "Senior architect.", 620);
-        addTrace("Reconciliation", MODEL_LABELS["gemini-pro"], s5);
+        const s5Result = await callWithFallback(
+            "gemini-pro",
+            "reasoner",
+            `Experts refined positions on: ${msg}\n\n${defensePayload}\n\nSynthesize one final protocol with priorities and risks.`,
+            "Senior architect.",
+            620
+        );
+        addTrace("Reconciliation", MODEL_LABELS[s5Result.model], s5Result.text);
 
         updateProgress(5, stageLabels);
-        const s6 = await callAPI("kimi", `Improve readability and remove meta-talk from this response.\n\nText:\n${s5}`, "Senior editor.", 620);
+        const s6 = await callAPI("kimi", `Improve readability and remove meta-talk from this response.\n\nText:\n${s5Result.text}`, "Senior editor.", 620);
         addTrace("Polish", MODEL_LABELS.kimi, s6);
 
         updateProgress(6, stageLabels);
