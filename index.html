@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oracle Protocol | Multi-Model Adversarial Consensus</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+
+</head>
+
+<body>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-logo">ORACLE</div>
+        <nav class="sidebar-nav">
+            <button class="nav-link active" data-tab="home" onclick="switchTab('home')">Command</button>
+            <button class="nav-link" data-tab="oracle" onclick="switchTab('oracle')">Oracle Lab</button>
+            <button class="nav-link" data-tab="council" onclick="switchTab('council')">Council Hall</button>
+            <button class="nav-link" data-tab="chat" onclick="switchTab('chat')">Direct Uplink</button>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="engine-badge">4 Engines Online</div>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main-viewport">
+        <div class="content-container">
+
+            <!-- HOME -->
+            <section id="tab-home" class="tab-content active">
+                <div class="section-header">
+                    <h1>Intelligence Command</h1>
+                    <p class="lead">Select a protocol to begin multi-model coordination.</p>
+                </div>
+
+                <div class="home-grid">
+                    <div class="feature-card card-oracle" onclick="switchTab('oracle')">
+                        <div class="card-icon">◉</div>
+                        <div class="card-text">
+                            <h3>Oracle Protocol</h3>
+                            <p>7-stage adversarial consensus. Four heavyweight models propose, critique, defend, and
+                                reconcile to produce one definitive answer.</p>
+                        </div>
+                        <div class="card-models">DS · KM · DR · MM</div>
+                    </div>
+                    <div class="feature-card" onclick="switchTab('council')">
+                        <div class="card-icon">⚖️</div>
+                        <div class="card-text">
+                            <h3>Council Hall</h3>
+                            <p>Persona-driven dialogue with Leibowitz, Parfit, and Richelieu for strategic, ethical, and
+                                political analysis.</p>
+                        </div>
+                    </div>
+                    <div class="feature-card" onclick="switchTab('chat')">
+                        <div class="card-icon">↗</div>
+                        <div class="card-text">
+                            <h3>Direct Uplink</h3>
+                            <p>Raw, unfiltered access to any individual model engine for fast, targeted queries.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ORACLE LAB -->
+            <section id="tab-oracle" class="tab-content">
+                <div class="section-header">
+                    <h1>Oracle Protocol</h1>
+                    <p class="lead">Adversarial multi-model consensus engine. 4 models. 7 stages. 1 truth.</p>
+                </div>
+
+                <div class="oracle-input-area">
+                    <textarea id="oracle-input" class="oracle-textarea"
+                        placeholder="Enter your high-stakes inquiry here..." rows="3"></textarea>
+                    <button class="oracle-submit-btn" id="oracle-run-btn" onclick="runOracle()">
+                        <span id="oracle-btn-text">Initiate Protocol</span>
+                    </button>
+                </div>
+
+                <!-- Engine Status -->
+                <div class="engine-roster" id="engine-roster">
+                    <div class="engine-node" id="node-deepseek">
+                        <div class="engine-dot" style="background:#22d3ee;"></div>
+                        <span>DeepSeek V3.2</span>
+                        <span class="engine-role" id="role-deepseek">Standby</span>
+                    </div>
+                    <div class="engine-node" id="node-kimi">
+                        <div class="engine-dot" style="background:#f472b6;"></div>
+                        <span>Kimi K2.5</span>
+                        <span class="engine-role" id="role-kimi">Standby</span>
+                    </div>
+                    <div class="engine-node" id="node-reasoner">
+                        <div class="engine-dot" style="background:#8b5cf6;"></div>
+                        <span>DeepSeek Reasoner</span>
+                        <span class="engine-role" id="role-reasoner">Standby</span>
+                    </div>
+                    <div class="engine-node" id="node-minimax">
+                        <div class="engine-dot" style="background:#c084fc;"></div>
+                        <span>MiniMax M2.1</span>
+                        <span class="engine-role" id="role-minimax">Standby</span>
+                    </div>
+                </div>
+
+                <!-- Stage Progress -->
+                <div class="stage-tracker" id="stage-tracker" style="display:none;">
+                    <div class="stage-item" id="s1"><span class="stage-num">01</span> Deconstruction</div>
+                    <div class="stage-item" id="s2"><span class="stage-num">02</span> Parallel Proposals</div>
+                    <div class="stage-item" id="s3"><span class="stage-num">03</span> Blind Critique</div>
+                    <div class="stage-item" id="s4"><span class="stage-num">04</span> Adversarial Defense</div>
+                    <div class="stage-item" id="s5"><span class="stage-num">05</span> Reconciliation</div>
+                    <div class="stage-item" id="s6"><span class="stage-num">06</span> Polish</div>
+                    <div class="stage-item" id="s7"><span class="stage-num">07</span> Final Protocol</div>
+                </div>
+
+                <!-- Nexus Animation -->
+                <div class="nexus-container" id="nexus-animation" style="display:none;">
+                    <div class="nexus-ring">
+                        <div class="nexus-dot dot-1"></div>
+                        <div class="nexus-dot dot-2"></div>
+                        <div class="nexus-dot dot-3"></div>
+                        <div class="nexus-dot dot-4"></div>
+                    </div>
+                    <div class="nexus-label" id="nexus-label">Deconstructing...</div>
+                </div>
+
+                <!-- Result -->
+                <div class="oracle-result" id="oracle-result" style="display:none;">
+                    <div class="result-header">
+                        <h2>Final Protocol</h2>
+                        <span class="result-meta" id="result-meta"></span>
+                    </div>
+                    <div class="result-body" id="oracle-output"></div>
+                    <button class="trace-toggle" onclick="toggleTrace()">View Full Debate Transcript</button>
+                    <div class="trace-container" id="trace-container" style="display:none;"></div>
+                </div>
+            </section>
+
+            <!-- COUNCIL HALL -->
+            <section id="tab-council" class="tab-content">
+                <div class="section-header">
+                    <h1>Council Hall</h1>
+                    <p class="lead">Persona-driven strategic dialogue.</p>
+                </div>
+                <div style="display: grid; grid-template-columns: 220px 1fr; gap: 24px; height: 60vh;">
+                    <div class="agent-window" style="padding: 12px;">
+                        <div class="agent-title" style="padding:12px 8px;">Personas</div>
+                        <div id="council-persona-list"></div>
+                    </div>
+                    <div class="agent-window">
+                        <div class="agent-header">
+                            <span class="agent-title">Dialogue</span>
+                            <span class="agent-status" id="council-status">Ready</span>
+                        </div>
+                        <div class="agent-chat" id="council-chat-history">
+                            <div class="bubble ai">Select a persona and begin.</div>
+                        </div>
+                        <div class="input-bar">
+                            <input type="text" id="council-input" placeholder="Message..."
+                                onkeydown="if(event.key==='Enter') sendCouncilMessage()">
+                            <button onclick="sendCouncilMessage()">Send</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- DIRECT CHAT -->
+            <section id="tab-chat" class="tab-content">
+                <div class="section-header">
+                    <h1>Direct Uplink</h1>
+                    <p class="lead">Single-model communication.</p>
+                </div>
+                <div style="display: grid; grid-template-columns: 220px 1fr; gap: 24px; height: 60vh;">
+                    <div class="agent-window" style="padding: 12px;">
+                        <div class="agent-title" style="padding:12px 8px;">Engines</div>
+                        <div id="chat-model-list"></div>
+                    </div>
+                    <div class="agent-window">
+                        <div class="agent-header">
+                            <span class="agent-title">Stream</span>
+                        </div>
+                        <div class="agent-chat" id="chat-history">
+                            <div class="bubble ai">Select an engine to connect.</div>
+                        </div>
+                        <div class="input-bar">
+                            <input type="text" id="chat-input" placeholder="Message engine..."
+                                onkeydown="if(event.key==='Enter') sendDirectMessage()">
+                            <button onclick="sendDirectMessage()">Send</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>
