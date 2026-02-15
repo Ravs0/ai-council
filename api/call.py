@@ -48,7 +48,53 @@ class handler(BaseHTTPRequestHandler):
         system = body.get('system', 'You are a helpful assistant.')
         max_tokens = body.get('max_tokens', 1000)
 
-        config = MODELS.get(mk)
+        # ─── GEMINI HANDLER ──────────────────────────────────────────────────
+        if mk and mk.startswith("gemini"):
+            # Hardcoded key as per user instruction
+            api_key = "[REDACTED]"
+            
+            # Map simplified names to real model IDs
+            # Per user scan list: models/gemini-3-flash-preview, models/gemini-3-pro-preview
+            real_model = "gemini-2.0-flash" 
+            if "flash" in mk: real_model = "gemini-3-flash-preview"
+            elif "pro" in mk: real_model = "gemini-3-pro-preview"
+            
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{real_model}:generateContent?key={api_key}"
+            
+            g_payload = {
+                "contents": [{
+                    "parts": [{"text": f"{system}\n\n{prompt}"}] 
+                }],
+                "generationConfig": {
+                    "temperature": 0.7,
+                    "maxOutputTokens": max_tokens
+                }
+            }
+            
+            try:
+                resp = http.post(url, json=g_payload, headers={'Content-Type': 'application/json'}, timeout=55)
+                
+                # Fallback logic if 'gemini-3-flash-preview' fails (sometimes preview names change)
+                if resp.status_code == 404 or resp.status_code == 400:
+                    fallback = "gemini-2.0-flash"
+                    print(f"Gemini 3 model {real_model} error {resp.status_code}, strictly falling back to {fallback}")
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{fallback}:generateContent?key={api_key}"
+                    resp = http.post(url, json=g_payload, headers={'Content-Type': 'application/json'}, timeout=55)
+
+                resp.raise_for_status()
+                result = resp.json()
+                # Safe extraction of text
+                text = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', '')
+                if not text:
+                    text = "[Gemini Error: No text returned. Check API quotas.]"
+                
+                return self._json(200, {"text": text})
+
+            except Exception as e:
+                return self._json(500, {"error": f"Gemini Error: {str(e)}"})
+
+        # ─── EXISTING HANDLER (DeepSeek/Minimax) ─────────────────────────────
+        config = MODELS.get(body.get('model'))
         if not config or not config.get('api_key'):
             return self._json(400, {"error": f"Model {mk} not configured"})
 

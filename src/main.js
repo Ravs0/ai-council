@@ -2,13 +2,16 @@ import './style.css';
 
 const API_BASE = window.location.origin;
 
-const MODELS = ["deepseek", "kimi", "minimax", "reasoner"];
+const MODELS = ["deepseek", "kimi", "minimax", "reasoner", "gemini-flash", "gemini-pro"];
 const MODEL_NAMES = {
     deepseek: "DeepSeek V3.2",
     kimi: "Kimi K2.5",
     minimax: "Minimax M2.1",
-    reasoner: "DeepSeek Reasoner"
+    reasoner: "DeepSeek Reasoner",
+    "gemini-flash": "Gemini 3 Flash",
+    "gemini-pro": "Gemini 3 Pro"
 };
+
 const STAGE_LABELS = [
     "Deconstructing Inquiry...",
     "Drafting Parallel Proposals...",
@@ -67,8 +70,6 @@ async function callAPI(model, prompt, system = "", maxTokens = 1000) {
 
 // ─── ORACLE PROTOCOL ─────────────────────────────────────────────────────────
 
-// ─── ORACLE PROTOCOL (OPTIMIZED) ─────────────────────────────────────────────
-
 async function runOracle() {
     const input = document.getElementById('oracle-input');
     const msg = input.value.trim();
@@ -85,9 +86,8 @@ async function runOracle() {
 
     const startTime = Date.now();
 
-    // FAST TRACK MODELS (No Reasoner here - too slow)
-    // We use DeepSeek V3, Kimi, Minimax for proposal/critique/defense loops.
-    const FAST_MODELS = ["deepseek", "kimi", "minimax"];
+    // FAST TRACK MODELS (Gemini 3 Flash + Kimi)
+    const FAST_MODELS = ["gemini-flash", "kimi"];
 
     const updateProgress = (idx, labelOverride = null) => {
         document.querySelectorAll('.stage-item').forEach((el, i) => {
@@ -101,17 +101,17 @@ async function runOracle() {
         document.getElementById('nexus-label').textContent = label;
 
         // Update Grid Status
-        ['deepseek', 'kimi', 'minimax', 'reasoner'].forEach(k => {
+        ['deepseek', 'kimi', 'minimax', 'reasoner', 'gemini-flash', 'gemini-pro'].forEach(k => {
             const node = document.getElementById(`node-${k}`);
             const role = document.getElementById(`role-${k}`);
             if (!node || !role) return;
 
             // Visual Logic
-            if (idx === 0 && k === 'deepseek') { role.textContent = 'Analyst'; node.classList.add('active'); }
+            if (idx === 0 && k === 'gemini-flash') { role.textContent = 'Analyst'; node.classList.add('active'); }
             else if ((idx === 1 || idx === 3) && FAST_MODELS.includes(k)) { role.textContent = 'Active'; node.classList.add('active'); }
             else if (idx === 2 && FAST_MODELS.includes(k)) { role.textContent = 'Reviewing'; node.classList.add('active'); }
-            else if (idx === 4 && k === 'reasoner') { role.textContent = 'Judge'; node.classList.add('active'); }
-            else if (idx === 5 && k === 'kimi') { role.textContent = 'Editor'; node.classList.add('active'); }
+            else if (idx === 4 && k === 'gemini-pro') { role.textContent = 'Judge'; node.classList.add('active'); }
+            else if (idx === 5 && k === 'gemini-flash') { role.textContent = 'Editor'; node.classList.add('active'); }
             else { role.textContent = 'Standby'; node.classList.remove('active'); }
         });
     };
@@ -125,16 +125,15 @@ async function runOracle() {
     };
 
     try {
-        // ── STAGE 1: DECONSTRUCTION (DeepSeek V3) ──
+        // ── STAGE 1: DECONSTRUCTION (Gemini 3 Flash) ──
         updateProgress(0);
-        const s1 = await callAPI("deepseek",
+        const s1 = await callAPI("gemini-flash",
             `Refine this inquiry into 3 robust pillars: Core Question, Hidden Variables, Required Constraints.\n\nInquiry: ${msg}`,
             "Strategic Analyst.", 400);
-        addTrace("Deconstruction", "DeepSeek V3", s1);
+        addTrace("Deconstruction", "Gemini 3 Flash", s1);
 
         // ── STAGE 2: PARALLEL PROPOSALS (Fast Models) ──
         updateProgress(1);
-        // Execute in PARALLEL because these are fast models (<10s each).
         const propResults = await Promise.allSettled(FAST_MODELS.map(m =>
             callAPI(m, `Context: ${s1}\n\nQuestion: ${msg}\n\nPropose a direct solution (200 words).`, "Expert Consultant.", 500)
         ));
@@ -150,7 +149,6 @@ async function runOracle() {
         updateProgress(2);
         const pSummary = proposals.map((p, i) => `Option ${chr(i)}: ${p.text.substring(0, 300)}`).join("\n\n");
 
-        // Parallel Critique
         const critResults = await Promise.allSettled(FAST_MODELS.map(m =>
             callAPI(m, `Analyze these options for: ${msg}\n\n${pSummary}\n\nIdentify the single biggest flaw in each. Be ruthless.`, "Red Team.", 400)
         ));
@@ -166,7 +164,6 @@ async function runOracle() {
         updateProgress(3);
         const cSummary = critiques.map((c, i) => `Critic ${chr(i)}: ${c.text.substring(0, 200)}`).join("\n");
 
-        // Parallel Defense
         const defResults = await Promise.allSettled(proposals.map(p =>
             callAPI(p.model, `Your original proposal: ${p.text.substring(0, 300)}\n\nCritiques received:\n${cSummary}\n\nUpdate your solution to address these flaws.`, "Resilient Architect.", 600)
         ));
@@ -177,22 +174,21 @@ async function runOracle() {
             return { model: proposals[i].model, text: txt };
         });
 
-        // ── STAGE 5: RECONCILIATION (DeepSeek Reasoner - The Heavy Lifter) ──
+        // ── STAGE 5: RECONCILIATION (Gemini 3 Pro) ──
         updateProgress(4);
         const dBlock = defenses.map(d => `[${MODEL_NAMES[d.model]}]: ${d.text}`).join("\n\n");
 
-        // This is the ONLY slow call allowed. 60s max.
-        const s5 = await callAPI("reasoner",
+        const s5 = await callAPI("gemini-pro",
             `Experts have debated on: ${msg}\n\nFinal Positions:\n${dBlock}\n\nSynthesize the absolute TRUTH. One cohesive protocol. No "Option A/B". Just the answer.`,
-            "Supreme Judge.", 1000);
-        addTrace("Reconciliation", "DeepSeek Reasoner", s5);
+            "Supreme Judge.", 2000);
+        addTrace("Reconciliation", "Gemini 3 Pro", s5);
 
-        // ── STAGE 6: POLISH (Kimi) ──
+        // ── STAGE 6: POLISH (Gemini 3 Flash) ──
         updateProgress(5);
-        const s6 = await callAPI("kimi",
-            `Rewrite this text to be clinically precise, authoritative, and stripped of all meta-commentary ("Here is the answer"). Just the raw protocol.\n\nText:\n${s5}`,
+        const s6 = await callAPI("gemini-flash",
+            `Rewrite this text into a "Protocol from the Future". Use the WRITING GUIDE rules strictly. Clinically precise, authoritative. Just the raw text.\n\nText:\n${s5}`,
             `Chief Editor. STRICT RULES:\n${WRITING_GUIDE}\nOUTPUT ONLY THE FINAL PROTOCOL text.`, 1000);
-        addTrace("Polish", "Kimi K2.5", s6);
+        addTrace("Polish", "Gemini 3 Flash", s6);
 
         // ── DONE ──
         updateProgress(6, "Protocol Complete");
@@ -201,7 +197,7 @@ async function runOracle() {
         document.getElementById('oracle-output').textContent = s6;
 
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        document.getElementById('result-meta').textContent = `7/7 stages · 4 models · ${elapsed}s`;
+        document.getElementById('result-meta').textContent = `7/7 stages · Gemini 3 Powered · ${elapsed}s`;
 
     } catch (e) {
         console.error(e);
@@ -216,23 +212,24 @@ function chr(i) { return String.fromCharCode(65 + i); }
 
 // ─── COUNCIL HALL ─────────────────────────────────────────────────────────────
 
-function initCouncil() {
-    const list = document.getElementById('council-persona-list');
-    if (!list) return;
+async function initCouncil() {
+    const list = document.getElementById('persona-list');
     list.innerHTML = '';
-    Object.entries(PERSONAS).forEach(([key, p]) => {
-        const div = document.createElement('div');
-        div.className = 'persona-item';
-        div.innerHTML = `<strong>${p.name}</strong><br><small>${p.role}</small>`;
-        div.onclick = () => {
-            selectedPersona = key;
-            list.querySelectorAll('.persona-item').forEach(el => el.classList.remove('active'));
-            div.classList.add('active');
-            const status = document.getElementById('council-status');
-            if (status) status.textContent = p.name;
-        };
-        list.appendChild(div);
+    Object.keys(PERSONAS).forEach(key => {
+        const p = PERSONAS[key];
+        const el = document.createElement('div');
+        el.className = 'persona-card';
+        el.innerHTML = `<strong>${p.name}</strong><br><small>${p.role}</small>`;
+        el.onclick = () => selectPersona(key, el);
+        list.appendChild(el);
     });
+}
+
+function selectPersona(key, el) {
+    selectedPersona = key;
+    document.querySelectorAll('.persona-card').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('council-chat-history').innerHTML = `<div class="bubble ai">Ready. I am ${PERSONAS[key].name}.</div>`;
 }
 
 async function sendCouncilMessage() {
@@ -249,7 +246,7 @@ async function sendCouncilMessage() {
 
     try {
         const persona = PERSONAS[selectedPersona];
-        const reply = await callAPI("deepseek", msg, persona.system, 1500);
+        const reply = await callAPI("gemini-pro", msg, persona.system, 1500);
         document.getElementById('council-loading').outerHTML = `<div class="bubble ai"><strong>${persona.name}:</strong><br>${reply}</div>`;
     } catch (e) {
         document.getElementById('council-loading').outerHTML = `<div class="bubble ai">Error: ${e.message}</div>`;
@@ -259,21 +256,23 @@ async function sendCouncilMessage() {
 
 // ─── DIRECT UPLINK ────────────────────────────────────────────────────────────
 
-function initDirect() {
-    const list = document.getElementById('chat-model-list');
-    if (!list) return;
+async function initDirect() {
+    const list = document.getElementById('model-list');
     list.innerHTML = '';
     MODELS.forEach(m => {
-        const div = document.createElement('div');
-        div.className = 'persona-item';
-        div.innerHTML = `<strong>${MODEL_NAMES[m]}</strong>`;
-        div.onclick = () => {
-            selectedModel = m;
-            list.querySelectorAll('.persona-item').forEach(el => el.classList.remove('active'));
-            div.classList.add('active');
-        };
-        list.appendChild(div);
+        const el = document.createElement('div');
+        el.className = 'model-chip';
+        el.textContent = MODEL_NAMES[m];
+        el.onclick = () => selectModel(m, el);
+        list.appendChild(el);
     });
+}
+
+function selectModel(m, el) {
+    selectedModel = m;
+    document.querySelectorAll('.model-chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('chat-history').innerHTML = `<div class="bubble ai">Uplink established with ${MODEL_NAMES[m]}.</div>`;
 }
 
 async function sendDirectMessage() {
