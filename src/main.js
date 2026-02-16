@@ -136,6 +136,19 @@ function clearChat(containerId, text) {
     appendBubble(containerId, "ai", text);
 }
 
+function setSelectorButtonContent(button, title, subtitle) {
+    const titleEl = document.createElement("span");
+    titleEl.className = "selector-title";
+    titleEl.textContent = title;
+
+    const subEl = document.createElement("span");
+    subEl.className = "selector-sub";
+    subEl.textContent = subtitle;
+
+    button.appendChild(titleEl);
+    button.appendChild(subEl);
+}
+
 function switchTab(id) {
     document.querySelectorAll(".nav-link").forEach((el) => el.classList.remove("active"));
     document.querySelectorAll(`.nav-link[data-tab=\"${id}\"]`).forEach((el) => el.classList.add("active"));
@@ -330,7 +343,7 @@ function renderPersonaList() {
         const button = document.createElement("button");
         button.className = `selector-btn ${state.selectedPersona === id ? "active" : ""}`;
         button.type = "button";
-        button.innerHTML = `<span class=\"selector-title\">${p.name}</span><span class=\"selector-sub\">${p.role}</span>`;
+        setSelectorButtonContent(button, p.name, p.role);
         button.onclick = () => {
             state.selectedPersona = id;
             renderPersonaList();
@@ -349,7 +362,7 @@ function renderModelList() {
         const button = document.createElement("button");
         button.className = `selector-btn ${state.selectedDirectModel === m ? "active" : ""}`;
         button.type = "button";
-        button.innerHTML = `<span class=\"selector-title\">${MODEL_LABELS[m]}</span><span class=\"selector-sub\">Direct channel</span>`;
+        setSelectorButtonContent(button, MODEL_LABELS[m], "Direct channel");
         button.onclick = () => {
             state.selectedDirectModel = m;
             renderModelList();
@@ -445,7 +458,7 @@ function renderTolkeModels() {
         const button = document.createElement("button");
         button.className = `selector-btn ${state.selectedTolkeModel === m ? "active" : ""}`;
         button.type = "button";
-        button.innerHTML = `<span class=\"selector-title\">${MODEL_LABELS[m]}</span><span class=\"selector-sub\">Tolke voice</span>`;
+        setSelectorButtonContent(button, MODEL_LABELS[m], "Tolke voice");
         button.onclick = () => {
             state.selectedTolkeModel = m;
             renderTolkeModels();

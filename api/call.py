@@ -3,6 +3,7 @@ import json
 import os
 import re
 import time
+from urllib.parse import urlparse
 
 import requests as http
 
@@ -45,6 +46,9 @@ MIN_TOKENS = 64
 MAX_TOKENS = 1200
 MAX_RETRIES = 2
 REQUEST_TIMEOUT = (4, 16)
+ALLOWED_ORIGINS = {
+    o.strip() for o in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()
+}
 
 
 def _safe_int(v, fallback):
@@ -70,28 +74,56 @@ def _extract_gemini_text(data):
 
 
 class handler(BaseHTTPRequestHandler):
+    def _resolve_allowed_origin(self):
+        origin = self.headers.get("Origin")
+        if not origin:
+            return None
+
+        if origin in ALLOWED_ORIGINS:
+            return origin
+
+        # Default allow only same-origin requests when explicit allowlist is not set.
+        host = self.headers.get("Host", "")
+        parsed = urlparse(origin)
+        if parsed.netloc and parsed.netloc == host:
+            return origin
+
+        return None
+
     def do_OPTIONS(self):
+        allow_origin = self._resolve_allowed_origin()
+        if not allow_origin:
+            self.send_response(403)
+            self.end_headers()
+            return
+
         self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", allow_origin)
         self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Vary", "Origin")
         self.end_headers()
 
     def do_POST(self):
+        allow_origin = self._resolve_allowed_origin()
+        origin = self.headers.get("Origin")
+        if origin and not allow_origin:
+            return self._json(403, {"error": "Origin not allowed."}, allow_origin=None)
+
         try:
             length = _safe_int(self.headers.get("Content-Length", 0), 0)
             raw = self.rfile.read(length) if length else b"{}"
             body = json.loads(raw)
         except json.JSONDecodeError:
-            return self._json(400, {"error": "Invalid JSON body."})
+            return self._json(400, {"error": "Invalid JSON body."}, allow_origin=allow_origin)
 
         model_key = (body.get("model") or "").strip().lower()
         model_key = MODEL_ALIASES.get(model_key, model_key)
         prompt = (body.get("prompt") or "").strip()
         if not prompt:
-            return self._json(400, {"error": "Prompt is required."})
+            return self._json(400, {"error": "Prompt is required."}, allow_origin=allow_origin)
         if len(prompt) > MAX_PROMPT_CHARS:
-            return self._json(400, {"error": f"Prompt too long (>{MAX_PROMPT_CHARS} chars)."})
+            return self._json(400, {"error": f"Prompt too long (>{MAX_PROMPT_CHARS} chars)."}, allow_origin=allow_origin)
 
         system = (body.get("system") or "You are a helpful assistant.").strip()
         max_tokens = _safe_int(body.get("max_tokens", 700), 700)
@@ -100,7 +132,7 @@ class handler(BaseHTTPRequestHandler):
         if model_key in ("gemini-flash", "gemini-pro"):
             api_key = os.environ.get("GEMINI_API_KEY")
             if not api_key:
-                return self._json(400, {"error": "Model gemini is not configured."})
+                return self._json(400, {"error": "Model gemini is not configured."}, allow_origin=allow_origin)
 
             gemini_model = "gemini-3-flash" if model_key == "gemini-flash" else "gemini-2.5-pro"
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={api_key}"
@@ -129,7 +161,7 @@ class handler(BaseHTTPRequestHandler):
                     response.raise_for_status()
                     data = response.json()
                     text = _extract_gemini_text(data)
-                    return self._json(200, {"text": text})
+                    return self._json(200, {"text": text}, allow_origin=allow_origin)
                 except (http.exceptions.Timeout, http.exceptions.ConnectionError):
                     last_error = "provider timeout"
                     if attempt < MAX_RETRIES:
@@ -145,13 +177,13 @@ class handler(BaseHTTPRequestHandler):
                     last_error = "internal request error"
                     break
 
-            return self._json(502, {"error": f"Model request failed ({last_error})."})
+            return self._json(502, {"error": f"Model request failed ({last_error})."}, allow_origin=allow_origin)
 
         config = MODELS.get(model_key)
         if not config:
-            return self._json(400, {"error": "Unsupported model."})
+            return self._json(400, {"error": "Unsupported model."}, allow_origin=allow_origin)
         if not config.get("api_key"):
-            return self._json(400, {"error": f"Model {model_key} is not configured."})
+            return self._json(400, {"error": f"Model {model_key} is not configured."}, allow_origin=allow_origin)
 
         headers = {
             "Authorization": f"Bearer {config['api_key']}",
@@ -183,7 +215,7 @@ class handler(BaseHTTPRequestHandler):
                 response.raise_for_status()
                 data = response.json()
                 text = _extract_text(data)
-                return self._json(200, {"text": text})
+                return self._json(200, {"text": text}, allow_origin=allow_origin)
             except (http.exceptions.Timeout, http.exceptions.ConnectionError):
                 last_error = "provider timeout"
                 if attempt < MAX_RETRIES:
@@ -199,12 +231,14 @@ class handler(BaseHTTPRequestHandler):
                 last_error = "internal request error"
                 break
 
-        return self._json(502, {"error": f"Model request failed ({last_error})."})
+        return self._json(502, {"error": f"Model request failed ({last_error})."}, allow_origin=allow_origin)
 
-    def _json(self, code, data):
+    def _json(self, code, data, allow_origin=None):
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        if allow_origin:
+            self.send_header("Access-Control-Allow-Origin", allow_origin)
+            self.send_header("Vary", "Origin")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
