@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
     <title>AI Council</title>
     <meta name="description"
         content="AI Council — Multi-model AI reasoning platform with Oracle, Council, and Tolke modes">
@@ -12,8 +12,11 @@
 </head>
 
 <body>
+    <!-- Sidebar overlay for mobile -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
     <main class="app">
-        <!-- SIDEBAR (desktop) -->
+        <!-- SIDEBAR (desktop + mobile overlay) -->
         <aside class="sidebar">
             <div class="sidebar-logo">
                 <span class="logo-dot"></span>
@@ -69,6 +72,7 @@
             <!-- TOP BAR -->
             <header class="topbar">
                 <div class="topbar-left">
+                    <button class="hamburger-btn" id="hamburger-btn" type="button" title="Menu">☰</button>
                     <div>
                         <div class="topbar-mode-label" id="mode-label">Direct</div>
                         <div class="topbar-mode-desc" id="mode-desc">Single model, direct response</div>
@@ -119,7 +123,7 @@
 
             <!-- COMPOSER -->
             <section class="composer">
-                <textarea id="chat-input" rows="2" placeholder="Type your message..."></textarea>
+                <textarea id="chat-input" rows="1" placeholder="Type your message..."></textarea>
                 <button class="send-btn" id="send-btn" type="button">Send</button>
             </section>
         </div>

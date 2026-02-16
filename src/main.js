@@ -583,19 +583,34 @@ async function loadPersonas() {
 function wireEvents() {
     // Mode buttons (sidebar + mobile bar)
     document.querySelectorAll(".mode-btn").forEach((btn) => {
-        btn.addEventListener("click", () => setMode(btn.dataset.mode));
+        btn.addEventListener("click", () => {
+            setMode(btn.dataset.mode);
+            closeMobileSidebar(); // close sidebar on mode select (mobile)
+        });
     });
 
     document.getElementById("send-btn").addEventListener("click", sendMessage);
-    document.getElementById("chat-input").addEventListener("keydown", (e) => {
+
+    const chatInput = document.getElementById("chat-input");
+    chatInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             sendMessage();
         }
     });
 
+    // Auto-resize textarea
+    chatInput.addEventListener("input", () => {
+        chatInput.style.height = "auto";
+        chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + "px";
+    });
+
     // Voice button
     document.getElementById("voice-btn").addEventListener("click", toggleVoice);
+
+    // Hamburger menu
+    document.getElementById("hamburger-btn")?.addEventListener("click", toggleMobileSidebar);
+    document.getElementById("sidebar-overlay")?.addEventListener("click", closeMobileSidebar);
 
     // Auth
     document.getElementById("login-btn")?.addEventListener("click", handleLogin);
@@ -626,6 +641,29 @@ function wireEvents() {
     });
 }
 
+/* ==================== MOBILE SIDEBAR ==================== */
+function toggleMobileSidebar() {
+    const sidebar = document.querySelector(".sidebar");
+    const overlay = document.getElementById("sidebar-overlay");
+    const isOpen = sidebar.classList.contains("mobile-open");
+
+    if (isOpen) {
+        closeMobileSidebar();
+    } else {
+        sidebar.classList.add("mobile-open");
+        overlay.style.display = "block";
+        requestAnimationFrame(() => overlay.classList.add("open"));
+    }
+}
+
+function closeMobileSidebar() {
+    const sidebar = document.querySelector(".sidebar");
+    const overlay = document.getElementById("sidebar-overlay");
+    sidebar.classList.remove("mobile-open");
+    overlay.classList.remove("open");
+    setTimeout(() => { overlay.style.display = "none"; }, 300);
+}
+
 async function init() {
     await loadPersonas();
     fillModelSelect("direct-model", state.selectedDirectModel);
@@ -646,3 +684,4 @@ async function init() {
 }
 
 init();
+
