@@ -15,26 +15,26 @@
 <body>
     <main class="app">
         <header class="topbar">
-            <div class="brand-wrap">
-                <h1>AI Council</h1>
-                <p>One chat, switch modes.</p>
+            <div class="topbar-left">
+                <button class="ghost-btn" id="new-chat-btn" type="button">New Chat</button>
             </div>
-            <section class="mode-bar" id="mode-bar" aria-label="Modes">
-                <button class="mode-btn active" data-mode="direct" type="button">Direct</button>
-                <button class="mode-btn" data-mode="oracle" type="button">Oracle</button>
-                <button class="mode-btn" data-mode="council" type="button">Council</button>
-                <button class="mode-btn" data-mode="tolke" type="button">Tolke</button>
-            </section>
+            <div class="topbar-center">AI Council</div>
+            <div class="topbar-right" id="mode-label">Direct</div>
         </header>
+
+        <section class="mode-bar" id="mode-bar" aria-label="Modes">
+            <button class="mode-btn active" data-mode="direct" type="button">Direct</button>
+            <button class="mode-btn" data-mode="oracle" type="button">Oracle</button>
+            <button class="mode-btn" data-mode="council" type="button">Council</button>
+            <button class="mode-btn" data-mode="tolke" type="button">Tolke</button>
+        </section>
 
         <section class="context-bar">
             <div class="context-group" data-for="direct">
-                <label for="direct-model">Model</label>
                 <select id="direct-model"></select>
             </div>
 
             <div class="context-group hidden" data-for="oracle">
-                <label for="oracle-mode">Run Mode</label>
                 <select id="oracle-mode">
                     <option value="auto">Auto</option>
                     <option value="swift">Swift</option>
@@ -43,12 +43,10 @@
             </div>
 
             <div class="context-group hidden" data-for="council">
-                <label for="council-persona">Persona</label>
                 <select id="council-persona"></select>
             </div>
 
             <div class="context-group hidden" data-for="tolke">
-                <label for="tolke-model">Model</label>
                 <select id="tolke-model"></select>
             </div>
         </section>

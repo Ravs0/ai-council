@@ -47,6 +47,13 @@ const state = {
     lastOracleTrace: []
 };
 
+function modeTitle(mode) {
+    if (mode === "oracle") return "Oracle";
+    if (mode === "council") return "Council";
+    if (mode === "tolke") return "Tolke";
+    return "Direct";
+}
+
 function currentKey() {
     if (state.mode === "oracle") return "oracle";
     if (state.mode === "direct") return `direct:${state.selectedDirectModel}`;
@@ -75,8 +82,7 @@ function renderFeed() {
 
     const history = ensureHistory(key);
     if (!history.length) {
-        const modeTitle = state.mode === "oracle" ? "Oracle" : state.mode === "council" ? "Council" : state.mode === "tolke" ? "Tolke" : "Direct";
-        appendMessage(key, "assistant", `${modeTitle} ready. Send a message to start.`, "System");
+        appendMessage(key, "assistant", `${modeTitle(state.mode)} ready. Send a message to start.`, "System");
     }
 
     ensureHistory(key).forEach((item) => {
@@ -139,6 +145,9 @@ function setMode(mode) {
     document.querySelectorAll(".context-group").forEach((g) => {
         g.classList.toggle("hidden", g.dataset.for !== mode);
     });
+
+    const modeLabel = document.getElementById("mode-label");
+    if (modeLabel) modeLabel.textContent = modeTitle(mode);
 
     const input = document.getElementById("chat-input");
     if (mode === "oracle") input.placeholder = "Ask Oracle a high-stakes question...";
@@ -391,6 +400,13 @@ function wireEvents() {
 
     document.getElementById("council-persona").addEventListener("change", (e) => {
         state.selectedPersona = e.target.value;
+        renderFeed();
+    });
+
+    document.getElementById("new-chat-btn").addEventListener("click", () => {
+        const key = currentKey();
+        state.histories[key] = [];
+        if (state.mode === "oracle") state.lastOracleTrace = [];
         renderFeed();
     });
 }
