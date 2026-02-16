@@ -3,12 +3,13 @@ import "superdoc/style.css";
 import { SuperDoc } from "superdoc";
 import { supabase } from "./supabase";
 import tolkeSystemPrompt from "./prompts/tolke-system-prompt.txt?raw";
-import { speak } from "./voice";
+import { speak, transcribe } from "./voice";
 
 
 const API_BASE = window.location.origin;
 
-const MODELS = ["deepseek", "kimi", "minimax", "reasoner", "gemini-flash", "gemini-pro", "groq", "sarvam"];
+// Sarvam removed from chat models — it's voice-only now
+const MODELS = ["deepseek", "kimi", "minimax", "reasoner", "gemini-flash", "gemini-pro", "groq"];
 const ORACLE_PROPOSAL_MODELS = ["deepseek", "kimi", "reasoner", "gemini-flash"];
 const MODEL_LABELS = {
     deepseek: "DeepSeek V3.2",
@@ -17,8 +18,15 @@ const MODEL_LABELS = {
     reasoner: "DeepSeek Reasoner",
     "gemini-flash": "Gemini 3 Flash",
     "gemini-pro": "Gemini 2.5 Pro",
-    groq: "Groq Llama 3.3 70B",
-    sarvam: "Sarvam M (Indic)"
+    groq: "Groq Llama 3.3 70B"
+};
+
+const MODE_DESCRIPTIONS = {
+    direct: "Single model, direct response",
+    oracle: "Multi-model deliberation engine",
+    council: "Persona-driven strategic advice",
+    tolke: "Warm, sharp conversational guide",
+    editor: "Collaborative document editor"
 };
 
 const FALLBACK_PERSONAS = {
@@ -52,7 +60,10 @@ const state = {
     selectedPersona: "leibowitz",
     histories: {},
     lastOracleTrace: [],
-    editor: null
+    editor: null,
+    isRecording: false,
+    mediaRecorder: null,
+    audioChunks: []
 };
 
 function modeTitle(mode) {
@@ -95,7 +106,7 @@ function renderFeed() {
 
     const history = ensureHistory(key);
     if (!history.length) {
-        appendMessage(key, "assistant", `${modeTitle(state.mode)} ready. Send a message to start.`, "System");
+        appendMessage(key, "assistant", `${modeTitle(state.mode)} mode ready. Send a message to begin.`, "System");
     }
 
     ensureHistory(key).forEach((item) => {
@@ -119,9 +130,22 @@ function renderFeed() {
             const speakBtn = document.createElement("button");
             speakBtn.className = "icon-btn";
             speakBtn.textContent = "🔊";
-            speakBtn.title = "Speak";
+            speakBtn.title = "Speak (Sarvam AI)";
             speakBtn.onclick = () => speak(item.content);
             actions.appendChild(speakBtn);
+
+            const copyBtn = document.createElement("button");
+            copyBtn.className = "icon-btn";
+            copyBtn.textContent = "📋";
+            copyBtn.title = "Copy";
+            copyBtn.onclick = () => {
+                navigator.clipboard.writeText(item.content).then(() => {
+                    copyBtn.textContent = "✓";
+                    setTimeout(() => { copyBtn.textContent = "📋"; }, 1500);
+                });
+            };
+            actions.appendChild(copyBtn);
+
             bubble.appendChild(actions);
         }
 
@@ -165,7 +189,6 @@ function renderTracePanel() {
 async function initEditor() {
     if (state.editor) return;
 
-    // Wait for container to be visible
     requestAnimationFrame(() => {
         try {
             state.editor = new SuperDoc({
@@ -186,16 +209,22 @@ async function initEditor() {
 
 function setMode(mode) {
     state.mode = mode;
+
+    // Update sidebar buttons
     document.querySelectorAll(".mode-btn").forEach((b) => {
         b.classList.toggle("active", b.dataset.mode === mode);
     });
 
+    // Update context groups
     document.querySelectorAll(".context-group").forEach((g) => {
         g.classList.toggle("hidden", g.dataset.for !== mode);
     });
 
+    // Update topbar labels
     const modeLabel = document.getElementById("mode-label");
+    const modeDesc = document.getElementById("mode-desc");
     if (modeLabel) modeLabel.textContent = modeTitle(mode);
+    if (modeDesc) modeDesc.textContent = MODE_DESCRIPTIONS[mode] || "";
 
     const input = document.getElementById("chat-input");
     const chatFeed = document.getElementById("chat-feed");
@@ -208,7 +237,6 @@ function setMode(mode) {
         oracleTrace.classList.add("hidden");
         editorContainer.classList.remove("hidden");
         composer.classList.add("hidden");
-
         initEditor();
     } else {
         chatFeed.classList.remove("hidden");
@@ -242,10 +270,6 @@ function updateAuthState(user) {
         loginBtn.classList.add("hidden");
         userInfo.classList.remove("hidden");
         userEmail.textContent = user.email;
-        if (state.editor && state.editor.user) {
-            // Attempt to update editor user context if API supports it, or just re-init on mode switch
-            // For now, simpler to rely on re-init when mode toggles if user changes
-        }
     } else {
         state.user = null;
         loginBtn.classList.remove("hidden");
@@ -272,6 +296,71 @@ async function handleLogout() {
     else updateAuthState(null);
 }
 
+/* ==================== VOICE (Sarvam) ==================== */
+async function toggleVoice() {
+    const voiceBtn = document.getElementById("voice-btn");
+
+    if (state.isRecording) {
+        // Stop recording
+        state.isRecording = false;
+        voiceBtn.classList.remove("recording");
+        voiceBtn.textContent = "🎤";
+
+        if (state.mediaRecorder && state.mediaRecorder.state !== "inactive") {
+            state.mediaRecorder.stop();
+        }
+        return;
+    }
+
+    // Start recording
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        state.audioChunks = [];
+        state.mediaRecorder = new MediaRecorder(stream);
+
+        state.mediaRecorder.ondataavailable = (e) => {
+            state.audioChunks.push(e.data);
+        };
+
+        state.mediaRecorder.onstop = async () => {
+            stream.getTracks().forEach(t => t.stop());
+            const audioBlob = new Blob(state.audioChunks, { type: "audio/webm" });
+
+            // Transcribe using Sarvam STT
+            const key = currentKey();
+            try {
+                appendMessage(key, "assistant", "🎙️ Transcribing your voice...", "Sarvam Voice");
+                renderFeed();
+
+                const text = await transcribe(audioBlob);
+                if (text) {
+                    // Remove the "transcribing" message
+                    const history = ensureHistory(key);
+                    history.pop();
+
+                    // Put transcribed text in the input
+                    document.getElementById("chat-input").value = text;
+                    renderFeed();
+                }
+            } catch (err) {
+                const history = ensureHistory(key);
+                history.pop();
+                appendMessage(key, "assistant", `Voice error: ${err.message}`, "System");
+                renderFeed();
+            }
+        };
+
+        state.mediaRecorder.start();
+        state.isRecording = true;
+        voiceBtn.classList.add("recording");
+        voiceBtn.textContent = "⏹";
+    } catch (err) {
+        console.error("Microphone access denied", err);
+        alert("Microphone access is required for voice input.");
+    }
+}
+
+/* ==================== API ==================== */
 async function callAPI(model, prompt, system = "", maxTokens = 700, timeoutMs = 22000) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -491,9 +580,8 @@ async function loadPersonas() {
     }
 }
 
-
-
 function wireEvents() {
+    // Mode buttons (sidebar + mobile bar)
     document.querySelectorAll(".mode-btn").forEach((btn) => {
         btn.addEventListener("click", () => setMode(btn.dataset.mode));
     });
@@ -506,9 +594,14 @@ function wireEvents() {
         }
     });
 
+    // Voice button
+    document.getElementById("voice-btn").addEventListener("click", toggleVoice);
+
+    // Auth
     document.getElementById("login-btn")?.addEventListener("click", handleLogin);
     document.getElementById("logout-btn")?.addEventListener("click", handleLogout);
 
+    // Model selectors
     document.getElementById("direct-model").addEventListener("change", (e) => {
         state.selectedDirectModel = e.target.value;
         renderFeed();

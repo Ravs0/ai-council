@@ -5,81 +5,124 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Council</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap"
-        rel="stylesheet">
+    <meta name="description"
+        content="AI Council — Multi-model AI reasoning platform with Oracle, Council, and Tolke modes">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="stylesheet" href="/src/style.css">
 </head>
 
 <body>
     <main class="app">
-        <header class="topbar">
-            <div class="topbar-left">
-                <button class="ghost-btn" id="new-chat-btn" type="button">New Chat</button>
+        <!-- SIDEBAR (desktop) -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <span class="logo-dot"></span>
+                AI Council
             </div>
-            <div class="topbar-center">AI Council</div>
-            <div class="topbar-right">
+
+            <div class="sidebar-section-label">Modes</div>
+
+            <button class="mode-btn active" data-mode="direct" type="button">
+                <span class="mode-icon">⚡</span> Direct
+            </button>
+            <button class="mode-btn" data-mode="oracle" type="button">
+                <span class="mode-icon">🔮</span> Oracle
+            </button>
+            <button class="mode-btn" data-mode="council" type="button">
+                <span class="mode-icon">👥</span> Council
+            </button>
+            <button class="mode-btn" data-mode="tolke" type="button">
+                <span class="mode-icon">🧠</span> Tolke
+            </button>
+            <button class="mode-btn" data-mode="editor" type="button">
+                <span class="mode-icon">📝</span> Editor
+            </button>
+
+            <div class="sidebar-spacer"></div>
+
+            <div class="sidebar-footer">
                 <div id="auth-container">
-                    <button class="ghost-btn" id="login-btn" type="button">Login</button>
-                    <div id="user-info" class="hidden" style="display: flex; gap: 8px; align-items: center;">
+                    <button class="sidebar-btn" id="login-btn" type="button">
+                        <span class="btn-icon">🔑</span> Login
+                    </button>
+                    <div id="user-info" class="hidden">
                         <span id="user-email"></span>
-                        <button class="ghost-btn" id="logout-btn" type="button"
-                            style="padding: 4px 8px; font-size: 11px;">Logout</button>
+                        <button class="sidebar-btn" id="logout-btn" type="button">
+                            <span class="btn-icon">🚪</span> Logout
+                        </button>
                     </div>
                 </div>
             </div>
-            <div id="mode-label" class="hidden"></div>
-        </header>
+        </aside>
 
-        <section class="mode-bar" id="mode-bar" aria-label="Modes">
-            <button class="mode-btn active" data-mode="direct" type="button">Direct</button>
-            <button class="mode-btn" data-mode="oracle" type="button">Oracle</button>
-            <button class="mode-btn" data-mode="council" type="button">Council</button>
-            <button class="mode-btn" data-mode="tolke" type="button">Tolke</button>
-            <button class="mode-btn" data-mode="editor" type="button">Editor</button>
-        </section>
+        <!-- MAIN CONTENT -->
+        <div class="main-panel">
+            <!-- Mobile mode bar (hidden on desktop) -->
+            <nav class="mobile-mode-bar">
+                <button class="mode-btn active" data-mode="direct" type="button">Direct</button>
+                <button class="mode-btn" data-mode="oracle" type="button">Oracle</button>
+                <button class="mode-btn" data-mode="council" type="button">Council</button>
+                <button class="mode-btn" data-mode="tolke" type="button">Tolke</button>
+                <button class="mode-btn" data-mode="editor" type="button">Editor</button>
+            </nav>
 
-        <section class="context-bar">
-            <div class="context-group" data-for="direct">
-                <select id="direct-model"></select>
-            </div>
+            <!-- TOP BAR -->
+            <header class="topbar">
+                <div class="topbar-left">
+                    <div>
+                        <div class="topbar-mode-label" id="mode-label">Direct</div>
+                        <div class="topbar-mode-desc" id="mode-desc">Single model, direct response</div>
+                    </div>
+                </div>
+                <div class="topbar-right">
+                    <button class="voice-btn" id="voice-btn" type="button" title="Voice (Sarvam AI)">🎤</button>
+                    <button class="new-chat-btn" id="new-chat-btn" type="button">+ New Chat</button>
+                </div>
+            </header>
 
-            <div class="context-group hidden" data-for="oracle">
-                <select id="oracle-mode">
-                    <option value="auto">Auto</option>
-                    <option value="swift">Swift</option>
-                    <option value="full">Full</option>
-                </select>
-            </div>
+            <!-- CONTEXT BAR -->
+            <section class="context-bar">
+                <div class="context-group" data-for="direct">
+                    <select id="direct-model"></select>
+                </div>
 
-            <div class="context-group hidden" data-for="council">
-                <select id="council-persona"></select>
-            </div>
+                <div class="context-group hidden" data-for="oracle">
+                    <select id="oracle-mode">
+                        <option value="auto">Auto</option>
+                        <option value="swift">Swift</option>
+                        <option value="full">Full</option>
+                    </select>
+                </div>
 
-            <div class="context-group hidden" data-for="tolke">
-                <select id="tolke-model"></select>
-            </div>
+                <div class="context-group hidden" data-for="council">
+                    <select id="council-persona"></select>
+                </div>
 
-            <div class="context-group hidden" data-for="editor">
-                <span class="label">SuperDoc Editor</span>
-            </div>
-        </section>
+                <div class="context-group hidden" data-for="tolke">
+                    <select id="tolke-model"></select>
+                </div>
 
-        <section class="chat-panel">
-            <div class="chat-feed" id="chat-feed"></div>
-            <details class="trace-panel hidden" id="oracle-trace-wrap">
-                <summary>Oracle Trace</summary>
-                <div id="oracle-trace"></div>
-            </details>
-            <div id="editor-container" class="editor-container hidden"></div>
-        </section>
+                <div class="context-group hidden" data-for="editor">
+                    <span class="label">SuperDoc Editor</span>
+                </div>
+            </section>
 
-        <section class="composer">
-            <textarea id="chat-input" rows="2" placeholder="Type your message..."></textarea>
-            <button id="send-btn" type="button">Send</button>
-        </section>
+            <!-- CHAT -->
+            <section class="chat-panel">
+                <div class="chat-feed" id="chat-feed"></div>
+                <details class="trace-panel hidden" id="oracle-trace-wrap">
+                    <summary>Oracle Trace</summary>
+                    <div id="oracle-trace"></div>
+                </details>
+                <div id="editor-container" class="editor-container hidden"></div>
+            </section>
+
+            <!-- COMPOSER -->
+            <section class="composer">
+                <textarea id="chat-input" rows="2" placeholder="Type your message..."></textarea>
+                <button class="send-btn" id="send-btn" type="button">Send</button>
+            </section>
+        </div>
     </main>
 
     <script type="module" src="/src/main.js"></script>

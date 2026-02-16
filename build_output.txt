@@ -1,0 +1,20 @@
+
+> ai-council-vite@0.0.0 build
+> vite build
+
+vite v7.3.1 building client environment for production...
+transforming...
+✓ 2 modules transformed.
+✗ Build failed in 37ms
+error during build:
+[commonjs--resolver] Missing "./dist/style.css" specifier in "superdoc" package
+    at e (file:///Users/basilikax/Library/Containers/com.apple.BKAgentService/Data/Documents/iBooks/Books/Legal/Projects/Apps/ai-council/node_modules/vite/dist/node/chunks/config.js:6651:8)
+    at n (file:///Users/basilikax/Library/Containers/com.apple.BKAgentService/Data/Documents/iBooks/Books/Legal/Projects/Apps/ai-council/node_modules/vite/dist/node/chunks/config.js:6663:14)
+    at o (file:///Users/basilikax/Library/Containers/com.apple.BKAgentService/Data/Documents/iBooks/Books/Legal/Projects/Apps/ai-council/node_modules/vite/dist/node/chunks/config.js:6691:10)
+    at resolveExportsOrImports (file:///Users/basilikax/Library/Containers/com.apple.BKAgentService/Data/Documents/iBooks/Books/Legal/Projects/Apps/ai-council/node_modules/vite/dist/node/chunks/config.js:32827:45)
+    at resolveDeepImport (file:///Users/basilikax/Library/Containers/com.apple.BKAgentService/Data/Documents/iBooks/Books/Legal/Projects/Apps/ai-council/node_modules/vite/dist/node/chunks/config.js:32841:22)
+    at tryNodeResolve (file:///Users/basilikax/Library/Containers/com.apple.BKAgentService/Data/Documents/iBooks/Books/Legal/Projects/Apps/ai-council/node_modules/vite/dist/node/chunks/config.js:32716:70)
+    at Object.handler (file:///Users/basilikax/Library/Containers/com.apple.BKAgentService/Data/Documents/iBooks/Books/Legal/Projects/Apps/ai-council/node_modules/vite/dist/node/chunks/config.js:32555:16)
+    at Object.handler (file:///Users/basilikax/Library/Containers/com.apple.BKAgentService/Data/Documents/iBooks/Books/Legal/Projects/Apps/ai-council/node_modules/vite/dist/node/chunks/config.js:33706:13)
+    at file:///Users/basilikax/Library/Containers/com.apple.BKAgentService/Data/Documents/iBooks/Books/Legal/Projects/Apps/ai-council/node_modules/rollup/dist/es/shared/node-entry.js:22548:40
+    at async PluginDriver.hookFirstAndGetPlugin (file:///Users/basilikax/Library/Containers/com.apple.BKAgentService/Data/Documents/iBooks/Books/Legal/Projects/Apps/ai-council/node_modules/rollup/dist/es/shared/node-entry.js:22430:28)
