@@ -32,6 +32,18 @@ MODELS = {
         "api_key": os.environ.get("DEEPSEEK_REASONER_API_KEY"),
         "base_url": "https://api.deepseek.com/v1",
     },
+    "groq": {
+        "name": "Groq Llama 3.3 70B",
+        "model_id": "llama-3.3-70b-versatile",
+        "api_key": os.environ.get("GROQ_API_KEY"),
+        "base_url": "https://api.groq.com/openai/v1",
+    },
+    "sarvam": {
+        "name": "Sarvam M",
+        "model_id": "sarvam-m",
+        "api_key": os.environ.get("SARVAM_API_KEY"),
+        "base_url": "https://api.sarvam.ai/v1",
+    },
 }
 
 MODEL_ALIASES = {
@@ -39,6 +51,8 @@ MODEL_ALIASES = {
     "deepseek-reasoner": "reasoner",
     "gemini_flash": "gemini-flash",
     "gemini_pro": "gemini-pro",
+    "groq": "groq",
+    "sarvam": "sarvam",
 }
 
 MAX_PROMPT_CHARS = 16000
@@ -178,6 +192,29 @@ class handler(BaseHTTPRequestHandler):
                     break
 
             return self._json(502, {"error": f"Model request failed ({last_error})."}, allow_origin=allow_origin)
+
+        if model_key == "sarvam":
+            try:
+                # Local import fallback
+                try:
+                    from api.sarvam_model import call_sarvam
+                except ImportError:
+                    try:
+                        from sarvam_model import call_sarvam
+                    except ImportError:
+                        # Direct import if running inside api directory
+                        import sarvam_model
+                        call_sarvam = sarvam_model.call_sarvam
+
+                text = call_sarvam(
+                    model_id="sarvam-2.0-8b-instruct",  # Updated to latest instruct model
+                    prompt=prompt,
+                    system_prompt=system,
+                    max_tokens=max_tokens
+                )
+                return self._json(200, {"text": text}, allow_origin=allow_origin)
+            except Exception as e:
+                return self._json(502, {"error": f"Sarvam error: {str(e)}"}, allow_origin=allow_origin)
 
         config = MODELS.get(model_key)
         if not config:

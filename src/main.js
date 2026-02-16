@@ -1,9 +1,14 @@
 import "./style.css";
+import "superdoc/dist/style.css";
+import { SuperDoc } from "superdoc";
+import { supabase } from "./supabase";
 import tolkeSystemPrompt from "./prompts/tolke-system-prompt.txt?raw";
+import { speak } from "./voice";
+
 
 const API_BASE = window.location.origin;
 
-const MODELS = ["deepseek", "kimi", "minimax", "reasoner", "gemini-flash", "gemini-pro"];
+const MODELS = ["deepseek", "kimi", "minimax", "reasoner", "gemini-flash", "gemini-pro", "groq", "sarvam"];
 const ORACLE_PROPOSAL_MODELS = ["deepseek", "kimi", "reasoner", "gemini-flash"];
 const MODEL_LABELS = {
     deepseek: "DeepSeek V3.2",
@@ -11,7 +16,9 @@ const MODEL_LABELS = {
     minimax: "MiniMax M2.1",
     reasoner: "DeepSeek Reasoner",
     "gemini-flash": "Gemini 3 Flash",
-    "gemini-pro": "Gemini 2.5 Pro"
+    "gemini-pro": "Gemini 2.5 Pro",
+    groq: "Groq Llama 3.3 70B",
+    sarvam: "Sarvam M (Indic)"
 };
 
 const FALLBACK_PERSONAS = {
@@ -44,13 +51,15 @@ const state = {
     selectedTolkeModel: "gemini-flash",
     selectedPersona: "leibowitz",
     histories: {},
-    lastOracleTrace: []
+    lastOracleTrace: [],
+    editor: null
 };
 
 function modeTitle(mode) {
     if (mode === "oracle") return "Oracle";
     if (mode === "council") return "Council";
     if (mode === "tolke") return "Tolke";
+    if (mode === "editor") return "Editor";
     return "Direct";
 }
 
@@ -58,6 +67,7 @@ function currentKey() {
     if (state.mode === "oracle") return "oracle";
     if (state.mode === "direct") return `direct:${state.selectedDirectModel}`;
     if (state.mode === "tolke") return `tolke:${state.selectedTolkeModel}`;
+    if (state.mode === "editor") return "editor";
     return `council:${state.selectedPersona}`;
 }
 
@@ -75,7 +85,10 @@ function clearNode(node) {
     while (node.firstChild) node.removeChild(node.firstChild);
 }
 
+
 function renderFeed() {
+    if (state.mode === "editor") return;
+
     const key = currentKey();
     const feed = document.getElementById("chat-feed");
     clearNode(feed);
@@ -99,6 +112,19 @@ function renderFeed() {
         const body = document.createElement("div");
         body.textContent = item.content;
         bubble.appendChild(body);
+
+        if (item.role === "assistant") {
+            const actions = document.createElement("div");
+            actions.className = "msg-actions";
+            const speakBtn = document.createElement("button");
+            speakBtn.className = "icon-btn";
+            speakBtn.textContent = "🔊";
+            speakBtn.title = "Speak";
+            speakBtn.onclick = () => speak(item.content);
+            actions.appendChild(speakBtn);
+            bubble.appendChild(actions);
+        }
+
         feed.appendChild(bubble);
     });
 
@@ -136,6 +162,28 @@ function renderTracePanel() {
     wrap.classList.remove("hidden");
 }
 
+async function initEditor() {
+    if (state.editor) return;
+
+    // Wait for container to be visible
+    requestAnimationFrame(() => {
+        try {
+            state.editor = new SuperDoc({
+                selector: "#editor-container",
+                documentMode: "editing",
+                html: "<h1>AI Council Document</h1><p>Start drafting or ask the AI to generate content here...</p>",
+                user: {
+                    name: "User",
+                    email: "user@example.com"
+                }
+            });
+            console.log("SuperDoc initialized");
+        } catch (e) {
+            console.error("Failed to initialize SuperDoc", e);
+        }
+    });
+}
+
 function setMode(mode) {
     state.mode = mode;
     document.querySelectorAll(".mode-btn").forEach((b) => {
@@ -150,12 +198,78 @@ function setMode(mode) {
     if (modeLabel) modeLabel.textContent = modeTitle(mode);
 
     const input = document.getElementById("chat-input");
-    if (mode === "oracle") input.placeholder = "Ask Oracle a high-stakes question...";
-    else if (mode === "council") input.placeholder = "Ask the selected persona...";
-    else if (mode === "tolke") input.placeholder = "Talk to Tolke...";
-    else input.placeholder = "Type your message...";
+    const chatFeed = document.getElementById("chat-feed");
+    const oracleTrace = document.getElementById("oracle-trace-wrap");
+    const editorContainer = document.getElementById("editor-container");
+    const composer = document.querySelector(".composer");
 
-    renderFeed();
+    if (mode === "editor") {
+        chatFeed.classList.add("hidden");
+        oracleTrace.classList.add("hidden");
+        editorContainer.classList.remove("hidden");
+        composer.classList.add("hidden");
+
+        initEditor();
+    } else {
+        chatFeed.classList.remove("hidden");
+        editorContainer.classList.add("hidden");
+        composer.classList.remove("hidden");
+
+        if (mode === "oracle") {
+            input.placeholder = "Ask Oracle a high-stakes question...";
+            if (state.lastOracleTrace.length) oracleTrace.classList.remove("hidden");
+        } else if (mode === "council") {
+            input.placeholder = "Ask the selected persona...";
+            oracleTrace.classList.add("hidden");
+        } else if (mode === "tolke") {
+            input.placeholder = "Talk to Tolke...";
+            oracleTrace.classList.add("hidden");
+        } else {
+            input.placeholder = "Type your message...";
+            oracleTrace.classList.add("hidden");
+        }
+        renderFeed();
+    }
+}
+
+function updateAuthState(user) {
+    const loginBtn = document.getElementById("login-btn");
+    const userInfo = document.getElementById("user-info");
+    const userEmail = document.getElementById("user-email");
+
+    if (user) {
+        state.user = user;
+        loginBtn.classList.add("hidden");
+        userInfo.classList.remove("hidden");
+        userEmail.textContent = user.email;
+        if (state.editor && state.editor.user) {
+            // Attempt to update editor user context if API supports it, or just re-init on mode switch
+            // For now, simpler to rely on re-init when mode toggles if user changes
+        }
+    } else {
+        state.user = null;
+        loginBtn.classList.remove("hidden");
+        userInfo.classList.add("hidden");
+        userEmail.textContent = "";
+    }
+}
+
+async function handleLogin() {
+    if (!supabase) return alert("Supabase not configured");
+    const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+            redirectTo: window.location.origin
+        }
+    });
+    if (error) alert(error.message);
+}
+
+async function handleLogout() {
+    if (!supabase) return;
+    const { error } = await supabase.auth.signOut();
+    if (error) alert(error.message);
+    else updateAuthState(null);
 }
 
 async function callAPI(model, prompt, system = "", maxTokens = 700, timeoutMs = 22000) {
@@ -286,6 +400,8 @@ async function runOracle(userText) {
 }
 
 async function sendMessage() {
+    if (state.mode === "editor") return;
+
     const input = document.getElementById("chat-input");
     const sendBtn = document.getElementById("send-btn");
     const text = input.value.trim();
@@ -375,6 +491,29 @@ async function loadPersonas() {
     }
 }
 
+async function initEditor() {
+    if (state.editor) return;
+
+    requestAnimationFrame(() => {
+        try {
+            const user = state.user || { name: "Guest", email: "guest@example.com" };
+            state.editor = new SuperDoc({
+                selector: "#editor-container",
+                documentMode: "editing",
+                html: "<h1>AI Council Document</h1><p>Start drafting or ask the AI to generate content here...</p>",
+                user: {
+                    name: user.user_metadata?.full_name || user.email?.split("@")[0] || "Guest",
+                    email: user.email || "guest@example.com",
+                    image: user.user_metadata?.avatar_url
+                }
+            });
+            console.log("SuperDoc initialized");
+        } catch (e) {
+            console.error("Failed to initialize SuperDoc", e);
+        }
+    });
+}
+
 function wireEvents() {
     document.querySelectorAll(".mode-btn").forEach((btn) => {
         btn.addEventListener("click", () => setMode(btn.dataset.mode));
@@ -387,6 +526,9 @@ function wireEvents() {
             sendMessage();
         }
     });
+
+    document.getElementById("login-btn")?.addEventListener("click", handleLogin);
+    document.getElementById("logout-btn")?.addEventListener("click", handleLogout);
 
     document.getElementById("direct-model").addEventListener("change", (e) => {
         state.selectedDirectModel = e.target.value;
@@ -404,6 +546,7 @@ function wireEvents() {
     });
 
     document.getElementById("new-chat-btn").addEventListener("click", () => {
+        if (state.mode === "editor") return;
         const key = currentKey();
         state.histories[key] = [];
         if (state.mode === "oracle") state.lastOracleTrace = [];
@@ -416,6 +559,16 @@ async function init() {
     fillModelSelect("direct-model", state.selectedDirectModel);
     fillModelSelect("tolke-model", state.selectedTolkeModel);
     fillPersonaSelect();
+
+    if (supabase) {
+        const { data: { session } } = await supabase.auth.getSession();
+        updateAuthState(session?.user);
+
+        supabase.auth.onAuthStateChange((_event, session) => {
+            updateAuthState(session?.user);
+        });
+    }
+
     wireEvents();
     setMode("direct");
 }
