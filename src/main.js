@@ -1,5 +1,5 @@
 import "./style.css";
-import "superdoc/dist/style.css";
+import "superdoc/style.css";
 import { SuperDoc } from "superdoc";
 import { supabase } from "./supabase";
 import tolkeSystemPrompt from "./prompts/tolke-system-prompt.txt?raw";
@@ -491,28 +491,7 @@ async function loadPersonas() {
     }
 }
 
-async function initEditor() {
-    if (state.editor) return;
 
-    requestAnimationFrame(() => {
-        try {
-            const user = state.user || { name: "Guest", email: "guest@example.com" };
-            state.editor = new SuperDoc({
-                selector: "#editor-container",
-                documentMode: "editing",
-                html: "<h1>AI Council Document</h1><p>Start drafting or ask the AI to generate content here...</p>",
-                user: {
-                    name: user.user_metadata?.full_name || user.email?.split("@")[0] || "Guest",
-                    email: user.email || "guest@example.com",
-                    image: user.user_metadata?.avatar_url
-                }
-            });
-            console.log("SuperDoc initialized");
-        } catch (e) {
-            console.error("Failed to initialize SuperDoc", e);
-        }
-    });
-}
 
 function wireEvents() {
     document.querySelectorAll(".mode-btn").forEach((btn) => {
