@@ -1,5 +1,5 @@
-import './style.css';
-import tolkeSystemPrompt from './prompts/tolke-system-prompt.txt?raw';
+import "./style.css";
+import tolkeSystemPrompt from "./prompts/tolke-system-prompt.txt?raw";
 
 const API_BASE = window.location.origin;
 
@@ -13,23 +13,6 @@ const MODEL_LABELS = {
     "gemini-flash": "Gemini 3 Flash",
     "gemini-pro": "Gemini 2.5 Pro"
 };
-
-const STAGE_LABELS_FULL = [
-    "Deconstructing Inquiry...",
-    "Drafting Parallel Proposals...",
-    "Conducting Blind Peer Review...",
-    "Adversarial Defense Phase...",
-    "Reconciling Expert Positions...",
-    "Polishing Sovereign Protocol...",
-    "Finalizing..."
-];
-
-const STAGE_LABELS_SWIFT = [
-    "Framing Core Question...",
-    "Drafting Dual Strategies...",
-    "Reconciling for Action...",
-    "Finalizing..."
-];
 
 const FALLBACK_PERSONAS = {
     leibowitz: {
@@ -55,22 +38,110 @@ const FALLBACK_PERSONAS = {
 const SHARED_STYLE_ADDON = "Be concrete, direct, and simple. If the user avoids the point, call it out clearly and bring focus back.";
 
 const state = {
+    mode: "direct",
     personas: {},
-    selectedPersona: null,
     selectedDirectModel: "deepseek",
-    councilHistory: [],
-    directHistoryByModel: {
-        deepseek: [],
-        kimi: [],
-        minimax: [],
-        reasoner: [],
-        "gemini-flash": [],
-        "gemini-pro": []
-    },
-    tolkeHistory: [],
     selectedTolkeModel: "gemini-flash",
-    oracleBusy: false
+    selectedPersona: "leibowitz",
+    histories: {},
+    lastOracleTrace: []
 };
+
+function currentKey() {
+    if (state.mode === "oracle") return "oracle";
+    if (state.mode === "direct") return `direct:${state.selectedDirectModel}`;
+    if (state.mode === "tolke") return `tolke:${state.selectedTolkeModel}`;
+    return `council:${state.selectedPersona}`;
+}
+
+function ensureHistory(key) {
+    if (!state.histories[key]) state.histories[key] = [];
+    return state.histories[key];
+}
+
+function appendMessage(key, role, content, meta = "") {
+    const history = ensureHistory(key);
+    history.push({ role, content, meta, ts: Date.now() });
+}
+
+function clearNode(node) {
+    while (node.firstChild) node.removeChild(node.firstChild);
+}
+
+function renderFeed() {
+    const key = currentKey();
+    const feed = document.getElementById("chat-feed");
+    clearNode(feed);
+
+    const history = ensureHistory(key);
+    if (!history.length) {
+        const modeTitle = state.mode === "oracle" ? "Oracle" : state.mode === "council" ? "Council" : state.mode === "tolke" ? "Tolke" : "Direct";
+        appendMessage(key, "assistant", `${modeTitle} ready. Send a message to start.`, "System");
+    }
+
+    ensureHistory(key).forEach((item) => {
+        const bubble = document.createElement("div");
+        bubble.className = `msg ${item.role === "user" ? "user" : "assistant"}`;
+
+        if (item.meta) {
+            const meta = document.createElement("div");
+            meta.className = "msg-meta";
+            meta.textContent = item.meta;
+            bubble.appendChild(meta);
+        }
+
+        const body = document.createElement("div");
+        body.textContent = item.content;
+        bubble.appendChild(body);
+        feed.appendChild(bubble);
+    });
+
+    feed.scrollTop = feed.scrollHeight;
+    renderTracePanel();
+}
+
+function renderTracePanel() {
+    const wrap = document.getElementById("oracle-trace-wrap");
+    const trace = document.getElementById("oracle-trace");
+    clearNode(trace);
+
+    if (state.mode !== "oracle" || !state.lastOracleTrace.length) {
+        wrap.classList.add("hidden");
+        return;
+    }
+
+    state.lastOracleTrace.forEach((t) => {
+        const item = document.createElement("div");
+        item.className = "trace-item";
+
+        const h = document.createElement("div");
+        h.className = "trace-head";
+        h.textContent = `${t.stage} · ${t.model}`;
+
+        const b = document.createElement("div");
+        b.className = "trace-body";
+        b.textContent = t.content;
+
+        item.appendChild(h);
+        item.appendChild(b);
+        trace.appendChild(item);
+    });
+
+    wrap.classList.remove("hidden");
+}
+
+function setMode(mode) {
+    state.mode = mode;
+    document.querySelectorAll(".mode-btn").forEach((b) => {
+        b.classList.toggle("active", b.dataset.mode === mode);
+    });
+
+    document.querySelectorAll(".context-group").forEach((g) => {
+        g.classList.toggle("hidden", g.dataset.for !== mode);
+    });
+
+    renderFeed();
+}
 
 async function callAPI(model, prompt, system = "", maxTokens = 700, timeoutMs = 22000) {
     const controller = new AbortController();
@@ -83,17 +154,11 @@ async function callAPI(model, prompt, system = "", maxTokens = 700, timeoutMs = 
             body: JSON.stringify({ model, prompt, system, max_tokens: maxTokens }),
             signal: controller.signal
         });
-
         const data = await res.json();
-        if (!res.ok || data.error) {
-            throw new Error(data.error || `Request failed (${res.status})`);
-        }
-
+        if (!res.ok || data.error) throw new Error(data.error || `Request failed (${res.status})`);
         return data.text || "";
     } catch (err) {
-        if (err.name === "AbortError") {
-            throw new Error("Provider timeout. Retry or use Swift mode.");
-        }
+        if (err.name === "AbortError") throw new Error("Provider timeout. Retry with Swift mode.");
         throw err;
     } finally {
         clearTimeout(timeout);
@@ -104,437 +169,233 @@ async function callWithFallback(primaryModel, fallbackModel, prompt, system, max
     try {
         const text = await callAPI(primaryModel, prompt, system, maxTokens, timeoutMs);
         return { model: primaryModel, text };
-    } catch (_primaryError) {
+    } catch (_e) {
         const text = await callAPI(fallbackModel, prompt, system, maxTokens, timeoutMs);
         return { model: fallbackModel, text };
     }
 }
 
-function appendBubble(containerId, role, content, meta = "") {
-    const container = document.getElementById(containerId);
-    const bubble = document.createElement("div");
-    bubble.className = `bubble ${role}`;
+async function runOracle(userText) {
+    const key = currentKey();
+    const modePref = document.getElementById("oracle-mode").value;
+    const mode = modePref === "auto" ? (window.matchMedia("(max-width: 900px)").matches ? "swift" : "full") : modePref;
+    const trace = [];
 
-    if (meta) {
-        const metaEl = document.createElement("div");
-        metaEl.className = "bubble-meta";
-        metaEl.textContent = meta;
-        bubble.appendChild(metaEl);
-    }
+    const addTrace = (stage, model, content) => {
+        trace.push({ stage, model, content });
+    };
 
-    const contentEl = document.createElement("div");
-    contentEl.textContent = content;
-    bubble.appendChild(contentEl);
+    if (mode === "swift") {
+        const s1 = await callAPI("deepseek", `Create a concise problem frame with objective, constraints, and success criteria.\n\nQuestion: ${userText}`, "Precision analyst mode.", 280);
+        addTrace("Frame", MODEL_LABELS.deepseek, s1);
 
-    container.appendChild(bubble);
-    container.scrollTop = container.scrollHeight;
-}
-
-function clearChat(containerId, text) {
-    const container = document.getElementById(containerId);
-    container.innerHTML = "";
-    appendBubble(containerId, "ai", text);
-}
-
-function setSelectorButtonContent(button, title, subtitle) {
-    const titleEl = document.createElement("span");
-    titleEl.className = "selector-title";
-    titleEl.textContent = title;
-
-    const subEl = document.createElement("span");
-    subEl.className = "selector-sub";
-    subEl.textContent = subtitle;
-
-    button.appendChild(titleEl);
-    button.appendChild(subEl);
-}
-
-function switchTab(id) {
-    document.querySelectorAll(".nav-link").forEach((el) => el.classList.remove("active"));
-    document.querySelectorAll(`.nav-link[data-tab=\"${id}\"]`).forEach((el) => el.classList.add("active"));
-    document.querySelectorAll(".tab-content").forEach((el) => el.classList.remove("active"));
-    const target = document.getElementById(`tab-${id}`);
-    if (target) target.classList.add("active");
-}
-
-function toggleTrace() {
-    const el = document.getElementById("trace-container");
-    el.style.display = el.style.display === "none" ? "block" : "none";
-}
-
-function oracleMode() {
-    const explicit = document.getElementById("oracle-mode").value;
-    if (explicit === "swift") return "swift";
-    if (explicit === "full") return "full";
-    return window.matchMedia("(max-width: 900px)").matches ? "swift" : "full";
-}
-
-function updateProgress(stageIdx, labels) {
-    document.querySelectorAll(".stage-item").forEach((el, i) => {
-        el.classList.remove("active");
-        if (i < stageIdx) el.classList.add("done");
-    });
-    const currentStage = document.getElementById(`s${stageIdx + 1}`);
-    if (currentStage) currentStage.classList.add("active");
-    document.getElementById("nexus-label").textContent = labels[stageIdx] || "Processing...";
-}
-
-function addTrace(stage, model, content) {
-    const entry = document.createElement("div");
-    entry.className = "trace-entry";
-
-    const stageEl = document.createElement("div");
-    stageEl.className = "trace-stage";
-    stageEl.textContent = stage;
-
-    const modelEl = document.createElement("div");
-    modelEl.className = "trace-model";
-    modelEl.textContent = model;
-
-    const contentEl = document.createElement("div");
-    contentEl.className = "trace-content";
-    contentEl.textContent = content;
-
-    entry.appendChild(stageEl);
-    entry.appendChild(modelEl);
-    entry.appendChild(contentEl);
-    document.getElementById("trace-container").appendChild(entry);
-}
-
-function markOracleDone(elapsed, mode, stageCount, modelCount) {
-    document.getElementById("nexus-animation").style.display = "none";
-    document.getElementById("oracle-result").style.display = "block";
-    document.getElementById("result-meta").textContent = `${stageCount}/${stageCount} stages · ${modelCount} models · ${elapsed}s · ${mode.toUpperCase()}`;
-}
-
-async function runOracle() {
-    if (state.oracleBusy) return;
-
-    const input = document.getElementById("oracle-input");
-    const msg = input.value.trim();
-    if (!msg) return;
-
-    const mode = oracleMode();
-    const stageLabels = mode === "full" ? STAGE_LABELS_FULL : STAGE_LABELS_SWIFT;
-
-    const btn = document.getElementById("oracle-run-btn");
-    state.oracleBusy = true;
-    btn.disabled = true;
-
-    document.getElementById("stage-tracker").style.display = "flex";
-    document.getElementById("nexus-animation").style.display = "flex";
-    document.getElementById("oracle-result").style.display = "none";
-    document.getElementById("trace-container").style.display = "none";
-    document.getElementById("trace-container").innerHTML = "";
-
-    const startedAt = Date.now();
-
-    try {
-        if (mode === "swift") {
-            updateProgress(0, stageLabels);
-            const s1 = await callAPI("deepseek", `Create a concise problem frame with objective, constraints, and success criteria.\n\nQuestion: ${msg}`, "Precision analyst mode.", 280);
-            addTrace("Frame", MODEL_LABELS.deepseek, s1);
-
-            updateProgress(1, stageLabels);
-            const draftModels = ["deepseek", "gemini-flash"];
-            const draftResults = await Promise.allSettled(
-                draftModels.map((m) => callAPI(m, `Brief: ${s1}\n\nQuestion: ${msg}\n\nReturn a practical answer in <=160 words.`, "Analytical mode.", 340))
-            );
-
-            const drafts = [];
-            draftResults.forEach((res, idx) => {
-                if (res.status === "fulfilled" && res.value) {
-                    drafts.push({ model: draftModels[idx], text: res.value });
-                    addTrace("Draft", MODEL_LABELS[draftModels[idx]], res.value);
-                }
-            });
-
-            if (!drafts.length) throw new Error("All draft models timed out. Retry once or switch model keys.");
-
-            updateProgress(2, stageLabels);
-            const payload = drafts.map((d) => `[${d.model}] ${d.text}`).join("\n\n");
-            const mergedResult = await callWithFallback(
-                "gemini-pro",
-                "reasoner",
-                `Unify these responses into one action-ready answer for: ${msg}\n\n${payload}\n\nOutput: clear steps + risk note.`,
-                "Senior synthesizer.",
-                520
-            );
-            addTrace("Merge", MODEL_LABELS[mergedResult.model], mergedResult.text);
-
-            updateProgress(3, stageLabels);
-            document.getElementById("oracle-output").textContent = mergedResult.text;
-            markOracleDone(((Date.now() - startedAt) / 1000).toFixed(1), mode, 4, drafts.length + 1);
-            return;
-        }
-
-        updateProgress(0, stageLabels);
-        const s1 = await callAPI("deepseek", `Deconstruct this in 4 bullets: essence, assumptions, constraints, criteria.\n\nInquiry: ${msg}`, "Surgical analyst mode.", 320);
-        addTrace("Deconstruction", MODEL_LABELS.deepseek, s1);
-
-        updateProgress(1, stageLabels);
-        const proposals = await Promise.allSettled(
-            ORACLE_PROPOSAL_MODELS.map((m) => callAPI(m, `Brief: ${s1}\n\nQuestion: ${msg}\n\nProvide your best answer (<=180 words).`, "Analytical mode.", 420))
+        const draftModels = ["deepseek", "gemini-flash"];
+        const draftResults = await Promise.allSettled(
+            draftModels.map((m) => callAPI(m, `Brief: ${s1}\n\nQuestion: ${userText}\n\nReturn a practical answer in <=160 words.`, "Analytical mode.", 340))
         );
-        const liveProposals = [];
-        proposals.forEach((res, idx) => {
-            if (res.status === "fulfilled") {
-                liveProposals.push({ model: ORACLE_PROPOSAL_MODELS[idx], text: res.value });
-                addTrace("Proposal", MODEL_LABELS[ORACLE_PROPOSAL_MODELS[idx]], res.value);
+
+        const drafts = [];
+        draftResults.forEach((r, i) => {
+            if (r.status === "fulfilled") {
+                drafts.push({ model: draftModels[i], text: r.value });
+                addTrace("Draft", MODEL_LABELS[draftModels[i]], r.value);
             }
         });
 
-        if (liveProposals.length < 2) {
-            throw new Error("Not enough model responses in full mode. Use Swift mode for lower latency.");
-        }
+        if (!drafts.length) throw new Error("All draft models failed.");
 
-        updateProgress(2, stageLabels);
-        const propSummary = liveProposals.map((p, i) => `Option ${i + 1} (${p.model}): ${p.text.slice(0, 260)}`).join("\n\n");
-        const critiques = await Promise.allSettled(
-            liveProposals.map((p) => callAPI(p.model, `Review these options for question: ${msg}\n\n${propSummary}\n\nGive one flaw and one strength per option.`, "Ruthless reviewer.", 360))
-        );
-        const critiqueText = critiques.filter((c) => c.status === "fulfilled").map((c) => c.value).join("\n\n");
-        if (!critiqueText) throw new Error("Critique stage failed. Retry or switch to Swift mode.");
-        addTrace("Critique", "Council", critiqueText);
-
-        updateProgress(3, stageLabels);
-        const defenses = await Promise.allSettled(
-            liveProposals.map((p) => callAPI(p.model, `Your proposal: ${p.text}\n\nCritiques:\n${critiqueText}\n\nImprove the answer with stronger logic and clearer action.`, "Refinement mode.", 430))
-        );
-        const defensePayload = defenses
-            .map((d, i) => (d.status === "fulfilled" ? `[${liveProposals[i].model}] ${d.value}` : ""))
-            .filter(Boolean)
-            .join("\n\n");
-        if (!defensePayload) throw new Error("Defense stage failed. Retry in Swift mode.");
-        addTrace("Defense", "Council", defensePayload);
-
-        updateProgress(4, stageLabels);
-        const s5Result = await callWithFallback(
+        const payload = drafts.map((d) => `[${d.model}] ${d.text}`).join("\n\n");
+        const merged = await callWithFallback(
             "gemini-pro",
             "reasoner",
-            `Experts refined positions on: ${msg}\n\n${defensePayload}\n\nSynthesize one final protocol with priorities and risks.`,
-            "Senior architect.",
-            620
+            `Unify these responses into one action-ready answer for: ${userText}\n\n${payload}\n\nOutput: clear steps + risk note.`,
+            "Senior synthesizer.",
+            520
         );
-        addTrace("Reconciliation", MODEL_LABELS[s5Result.model], s5Result.text);
+        addTrace("Merge", MODEL_LABELS[merged.model], merged.text);
 
-        updateProgress(5, stageLabels);
-        const s6 = await callAPI("kimi", `Improve readability and remove meta-talk from this response.\n\nText:\n${s5Result.text}`, "Senior editor.", 620);
-        addTrace("Polish", MODEL_LABELS.kimi, s6);
+        state.lastOracleTrace = trace;
+        appendMessage(key, "assistant", merged.text, `Oracle · ${mode.toUpperCase()}`);
+        return;
+    }
 
-        updateProgress(6, stageLabels);
-        document.getElementById("oracle-output").textContent = s6;
-        markOracleDone(((Date.now() - startedAt) / 1000).toFixed(1), mode, 7, liveProposals.length);
+    const s1 = await callAPI("deepseek", `Deconstruct this in 4 bullets: essence, assumptions, constraints, criteria.\n\nInquiry: ${userText}`, "Surgical analyst mode.", 320);
+    addTrace("Deconstruction", MODEL_LABELS.deepseek, s1);
+
+    const proposalResults = await Promise.allSettled(
+        ORACLE_PROPOSAL_MODELS.map((m) => callAPI(m, `Brief: ${s1}\n\nQuestion: ${userText}\n\nProvide your best answer (<=180 words).`, "Analytical mode.", 420))
+    );
+
+    const proposals = [];
+    proposalResults.forEach((r, i) => {
+        if (r.status === "fulfilled") {
+            proposals.push({ model: ORACLE_PROPOSAL_MODELS[i], text: r.value });
+            addTrace("Proposal", MODEL_LABELS[ORACLE_PROPOSAL_MODELS[i]], r.value);
+        }
+    });
+
+    if (proposals.length < 2) throw new Error("Not enough proposal responses.");
+
+    const summary = proposals.map((p, i) => `Option ${i + 1} (${p.model}): ${p.text.slice(0, 260)}`).join("\n\n");
+    const critiqueResults = await Promise.allSettled(
+        proposals.map((p) => callAPI(p.model, `Review these options for question: ${userText}\n\n${summary}\n\nGive one flaw and one strength per option.`, "Ruthless reviewer.", 360))
+    );
+    const critiques = critiqueResults.filter((c) => c.status === "fulfilled").map((c) => c.value).join("\n\n");
+    if (!critiques) throw new Error("Critique stage failed.");
+    addTrace("Critique", "Council", critiques);
+
+    const defenseResults = await Promise.allSettled(
+        proposals.map((p) => callAPI(p.model, `Your proposal: ${p.text}\n\nCritiques:\n${critiques}\n\nImprove the answer with stronger logic and clearer action.`, "Refinement mode.", 430))
+    );
+    const defensePayload = defenseResults
+        .map((d, i) => (d.status === "fulfilled" ? `[${proposals[i].model}] ${d.value}` : ""))
+        .filter(Boolean)
+        .join("\n\n");
+    if (!defensePayload) throw new Error("Defense stage failed.");
+    addTrace("Defense", "Council", defensePayload);
+
+    const recon = await callWithFallback(
+        "gemini-pro",
+        "reasoner",
+        `Experts refined positions on: ${userText}\n\n${defensePayload}\n\nSynthesize one final protocol with priorities and risks.`,
+        "Senior architect.",
+        620
+    );
+    addTrace("Reconciliation", MODEL_LABELS[recon.model], recon.text);
+
+    const polished = await callAPI("kimi", `Improve readability and remove meta-talk from this response.\n\nText:\n${recon.text}`, "Senior editor.", 620);
+    addTrace("Polish", MODEL_LABELS.kimi, polished);
+
+    state.lastOracleTrace = trace;
+    appendMessage(key, "assistant", polished, "Oracle · FULL");
+}
+
+async function sendMessage() {
+    const input = document.getElementById("chat-input");
+    const sendBtn = document.getElementById("send-btn");
+    const text = input.value.trim();
+    if (!text) return;
+
+    const key = currentKey();
+    appendMessage(key, "user", text);
+    input.value = "";
+    renderFeed();
+
+    sendBtn.disabled = true;
+
+    try {
+        if (state.mode === "oracle") {
+            await runOracle(text);
+        } else if (state.mode === "council") {
+            const persona = state.personas[state.selectedPersona];
+            const historyTail = ensureHistory(key).slice(-8).map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n");
+            const prompt = historyTail ? `${historyTail}\nUSER: ${text}` : text;
+            const response = await callAPI(
+                persona.preferred_model || "deepseek",
+                prompt,
+                `${persona.system_prompt}\n\n${SHARED_STYLE_ADDON}`,
+                720
+            );
+            appendMessage(key, "assistant", response, persona.name);
+        } else if (state.mode === "tolke") {
+            const historyTail = ensureHistory(key).slice(-10).map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n");
+            const prompt = historyTail ? `${historyTail}\nUSER: ${text}` : text;
+            const model = state.selectedTolkeModel;
+            const response = await callAPI(model, prompt, tolkeSystemPrompt, 900);
+            appendMessage(key, "assistant", response, `Tolke · ${MODEL_LABELS[model]}`);
+        } else {
+            const model = state.selectedDirectModel;
+            const historyTail = ensureHistory(key).slice(-8).map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n");
+            const prompt = historyTail ? `${historyTail}\nUSER: ${text}` : text;
+            const response = await callAPI(model, prompt, `Direct answer mode. Be concise but complete.\n${SHARED_STYLE_ADDON}`, 700);
+            appendMessage(key, "assistant", response, MODEL_LABELS[model]);
+        }
     } catch (e) {
-        document.getElementById("nexus-animation").style.display = "none";
-        document.getElementById("oracle-result").style.display = "block";
-        document.getElementById("oracle-output").textContent = `Oracle error: ${e.message}`;
+        appendMessage(key, "assistant", `Error: ${e.message}`, "System");
     } finally {
-        state.oracleBusy = false;
-        btn.disabled = false;
+        sendBtn.disabled = false;
+        renderFeed();
     }
 }
 
-function renderPersonaList() {
-    const container = document.getElementById("council-persona-list");
-    container.innerHTML = "";
+function fillModelSelect(id, selected) {
+    const select = document.getElementById(id);
+    clearNode(select);
+    MODELS.forEach((m) => {
+        const option = document.createElement("option");
+        option.value = m;
+        option.textContent = MODEL_LABELS[m];
+        if (m === selected) option.selected = true;
+        select.appendChild(option);
+    });
+}
+
+function fillPersonaSelect() {
+    const select = document.getElementById("council-persona");
+    clearNode(select);
 
     Object.entries(state.personas).forEach(([id, p]) => {
-        const button = document.createElement("button");
-        button.className = `selector-btn ${state.selectedPersona === id ? "active" : ""}`;
-        button.type = "button";
-        setSelectorButtonContent(button, p.name, p.role);
-        button.onclick = () => {
-            state.selectedPersona = id;
-            renderPersonaList();
-            clearChat("council-chat-history", `Connected to ${p.name}. Ask your question.`);
-            document.getElementById("council-status").textContent = `Linked: ${p.name}`;
-        };
-        container.appendChild(button);
+        const option = document.createElement("option");
+        option.value = id;
+        option.textContent = `${p.name} · ${p.role}`;
+        if (id === state.selectedPersona) option.selected = true;
+        select.appendChild(option);
     });
-}
-
-function renderModelList() {
-    const container = document.getElementById("chat-model-list");
-    container.innerHTML = "";
-
-    MODELS.forEach((m) => {
-        const button = document.createElement("button");
-        button.className = `selector-btn ${state.selectedDirectModel === m ? "active" : ""}`;
-        button.type = "button";
-        setSelectorButtonContent(button, MODEL_LABELS[m], "Direct channel");
-        button.onclick = () => {
-            state.selectedDirectModel = m;
-            renderModelList();
-            redrawDirectHistory();
-        };
-        container.appendChild(button);
-    });
-}
-
-function redrawDirectHistory() {
-    const container = document.getElementById("chat-history");
-    container.innerHTML = "";
-    const history = state.directHistoryByModel[state.selectedDirectModel] || [];
-
-    if (!history.length) {
-        appendBubble("chat-history", "ai", `Connected to ${MODEL_LABELS[state.selectedDirectModel]}.`);
-        return;
-    }
-
-    history.forEach((item) => appendBubble("chat-history", item.role, item.content, item.meta || ""));
-}
-
-async function sendCouncilMessage() {
-    const input = document.getElementById("council-input");
-    const text = input.value.trim();
-    if (!text) return;
-    if (!state.selectedPersona) {
-        alert("Select a persona first.");
-        return;
-    }
-
-    input.value = "";
-    appendBubble("council-chat-history", "user", text);
-
-    const persona = state.personas[state.selectedPersona];
-    document.getElementById("council-status").textContent = "Thinking...";
-
-    const historyTail = state.councilHistory.slice(-6).map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n");
-    const prompt = historyTail ? `${historyTail}\nUSER: ${text}` : text;
-
-    try {
-        const response = await callAPI(
-            persona.preferred_model || "deepseek",
-            prompt,
-            `${persona.system_prompt}\n\n${SHARED_STYLE_ADDON}`,
-            620
-        );
-        appendBubble("council-chat-history", "ai", response, persona.name);
-
-        state.councilHistory.push({ role: "user", content: text });
-        state.councilHistory.push({ role: "ai", content: response });
-        state.councilHistory = state.councilHistory.slice(-20);
-
-        document.getElementById("council-status").textContent = `Ready: ${persona.name}`;
-    } catch (e) {
-        appendBubble("council-chat-history", "ai", `Error: ${e.message}`, "System");
-        document.getElementById("council-status").textContent = "Error";
-    }
-}
-
-async function sendDirectMessage() {
-    const input = document.getElementById("chat-input");
-    const text = input.value.trim();
-    if (!text) return;
-
-    const model = state.selectedDirectModel;
-    input.value = "";
-    appendBubble("chat-history", "user", text);
-    state.directHistoryByModel[model].push({ role: "user", content: text });
-
-    const history = state.directHistoryByModel[model].slice(-8);
-    const prompt = history.map((h) => `${h.role.toUpperCase()}: ${h.content}`).join("\n");
-
-    try {
-        const reply = await callAPI(
-            model,
-            prompt,
-            `Direct answer mode. Be concise but complete.\n${SHARED_STYLE_ADDON}`,
-            700
-        );
-        state.directHistoryByModel[model].push({ role: "ai", content: reply, meta: MODEL_LABELS[model] });
-        redrawDirectHistory();
-    } catch (e) {
-        appendBubble("chat-history", "ai", `Error: ${e.message}`, "System");
-    }
-}
-
-function renderTolkeModels() {
-    const container = document.getElementById("tolke-model-list");
-    container.innerHTML = "";
-
-    MODELS.forEach((m) => {
-        const button = document.createElement("button");
-        button.className = `selector-btn ${state.selectedTolkeModel === m ? "active" : ""}`;
-        button.type = "button";
-        setSelectorButtonContent(button, MODEL_LABELS[m], "Tolke voice");
-        button.onclick = () => {
-            state.selectedTolkeModel = m;
-            renderTolkeModels();
-            redrawTolkeHistory();
-        };
-        container.appendChild(button);
-    });
-}
-
-function redrawTolkeHistory() {
-    const container = document.getElementById("tolke-history");
-    container.innerHTML = "";
-    const history = state.tolkeHistory || [];
-    if (!history.length) {
-        appendBubble("tolke-history", "ai", "Tolke online. Say what is real, and I’ll challenge what doesn’t add up.");
-        return;
-    }
-
-    history.forEach((item) => appendBubble("tolke-history", item.role, item.content, item.meta || ""));
-}
-
-async function sendTolkeMessage() {
-    const input = document.getElementById("tolke-input");
-    const text = input.value.trim();
-    if (!text) return;
-
-    const model = state.selectedTolkeModel;
-    input.value = "";
-    appendBubble("tolke-history", "user", text);
-    state.tolkeHistory.push({ role: "user", content: text });
-
-    const history = state.tolkeHistory.slice(-10);
-    const prompt = history.map((h) => `${h.role.toUpperCase()}: ${h.content}`).join("\n");
-
-    try {
-        const reply = await callAPI(model, prompt, tolkeSystemPrompt, 900);
-        state.tolkeHistory.push({ role: "ai", content: reply, meta: `Tolke · ${MODEL_LABELS[model]}` });
-        redrawTolkeHistory();
-    } catch (e) {
-        appendBubble("tolke-history", "ai", `Error: ${e.message}`, "System");
-    }
 }
 
 async function loadPersonas() {
     try {
         const res = await fetch(`${API_BASE}/data/council_personas.json`);
-        if (res.ok) {
-            state.personas = await res.json();
-        } else {
+        if (!res.ok) {
             state.personas = FALLBACK_PERSONAS;
+        } else {
+            state.personas = await res.json();
         }
     } catch (_e) {
         state.personas = FALLBACK_PERSONAS;
     }
-    state.selectedPersona = Object.keys(state.personas)[0] || null;
+
+    if (!state.personas[state.selectedPersona]) {
+        state.selectedPersona = Object.keys(state.personas)[0] || "leibowitz";
+    }
 }
 
-window.runOracle = runOracle;
-window.switchTab = switchTab;
-window.toggleTrace = toggleTrace;
-window.sendCouncilMessage = sendCouncilMessage;
-window.sendDirectMessage = sendDirectMessage;
-window.sendTolkeMessage = sendTolkeMessage;
+function wireEvents() {
+    document.querySelectorAll(".mode-btn").forEach((btn) => {
+        btn.addEventListener("click", () => setMode(btn.dataset.mode));
+    });
 
-window.addEventListener("DOMContentLoaded", async () => {
-    switchTab("home");
-    renderModelList();
-    redrawDirectHistory();
-    renderTolkeModels();
-    redrawTolkeHistory();
+    document.getElementById("send-btn").addEventListener("click", sendMessage);
+    document.getElementById("chat-input").addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
 
+    document.getElementById("direct-model").addEventListener("change", (e) => {
+        state.selectedDirectModel = e.target.value;
+        renderFeed();
+    });
+
+    document.getElementById("tolke-model").addEventListener("change", (e) => {
+        state.selectedTolkeModel = e.target.value;
+        renderFeed();
+    });
+
+    document.getElementById("council-persona").addEventListener("change", (e) => {
+        state.selectedPersona = e.target.value;
+        renderFeed();
+    });
+}
+
+async function init() {
     await loadPersonas();
-    renderPersonaList();
-    const firstPersona = state.personas[state.selectedPersona];
-    if (firstPersona) {
-        clearChat("council-chat-history", `Connected to ${firstPersona.name}. Ask your question.`);
-        document.getElementById("council-status").textContent = `Linked: ${firstPersona.name}`;
-    }
-});
+    fillModelSelect("direct-model", state.selectedDirectModel);
+    fillModelSelect("tolke-model", state.selectedTolkeModel);
+    fillPersonaSelect();
+    wireEvents();
+    setMode("direct");
+}
+
+init();

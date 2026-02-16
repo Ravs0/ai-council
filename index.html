@@ -4,199 +4,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Oracle Protocol | Multi-Model Adversarial Consensus</title>
+    <title>AI Council</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap"
-        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="stylesheet" href="/src/style.css">
 </head>
 
 <body>
-    <aside class="sidebar">
-        <div class="sidebar-logo">ORACLE</div>
-        <nav class="sidebar-nav">
-            <button class="nav-link active" data-tab="home" onclick="switchTab('home')">Command</button>
-            <button class="nav-link" data-tab="oracle" onclick="switchTab('oracle')">Oracle Lab</button>
-            <button class="nav-link" data-tab="council" onclick="switchTab('council')">Council Hall</button>
-            <button class="nav-link" data-tab="chat" onclick="switchTab('chat')">Direct Uplink</button>
-            <button class="nav-link" data-tab="tolke" onclick="switchTab('tolke')">Tolke</button>
-        </nav>
-        <div class="sidebar-footer">
-            <div class="engine-badge">Adaptive Oracle Online</div>
-        </div>
-    </aside>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <div class="brand">AI COUNCIL</div>
+            <p class="sidebar-note">One chat surface. Switch modes as needed.</p>
+            <div class="status-chip">Secure Multi-Mode</div>
+        </aside>
 
-    <main class="main-viewport">
-        <div class="content-container">
-            <section id="tab-home" class="tab-content active">
-                <div class="section-header">
-                    <h1>Intelligence Command</h1>
-                    <p class="lead">Select a protocol to begin multi-model coordination.</p>
+        <main class="workspace">
+            <header class="workspace-header">
+                <h1>Chat Workspace</h1>
+                <p>Standard interface with mode switching for Oracle, Council, Direct, and Tolke.</p>
+            </header>
+
+            <section class="mode-bar" id="mode-bar">
+                <button class="mode-btn active" data-mode="direct" type="button">Direct</button>
+                <button class="mode-btn" data-mode="oracle" type="button">Oracle</button>
+                <button class="mode-btn" data-mode="council" type="button">Council</button>
+                <button class="mode-btn" data-mode="tolke" type="button">Tolke</button>
+            </section>
+
+            <section class="context-bar">
+                <div class="context-group" data-for="direct">
+                    <label for="direct-model">Model</label>
+                    <select id="direct-model"></select>
                 </div>
 
-                <div class="home-grid">
-                    <div class="feature-card card-oracle" onclick="switchTab('oracle')">
-                        <div class="card-icon">◉</div>
-                        <div class="card-text">
-                            <h3>Oracle Protocol</h3>
-                            <p>Adaptive adversarial consensus with Swift mode for low-latency environments and Full mode for deeper multi-stage reasoning.</p>
-                        </div>
-                        <div class="card-models">DS · KM · DR · GF · GP</div>
-                    </div>
-                    <div class="feature-card" onclick="switchTab('council')">
-                        <div class="card-icon">⚖</div>
-                        <div class="card-text">
-                            <h3>Council Hall</h3>
-                            <p>Persona-driven strategic dialogue with structured threads and cleaner conversation management.</p>
-                        </div>
-                    </div>
-                    <div class="feature-card" onclick="switchTab('chat')">
-                        <div class="card-icon">↗</div>
-                        <div class="card-text">
-                            <h3>Direct Uplink</h3>
-                            <p>Focused model-by-model interaction with channel-specific history and quick switching.</p>
-                        </div>
-                    </div>
+                <div class="context-group hidden" data-for="oracle">
+                    <label for="oracle-mode">Oracle Mode</label>
+                    <select id="oracle-mode">
+                        <option value="auto">Auto (recommended)</option>
+                        <option value="swift">Swift</option>
+                        <option value="full">Full</option>
+                    </select>
+                </div>
+
+                <div class="context-group hidden" data-for="council">
+                    <label for="council-persona">Persona</label>
+                    <select id="council-persona"></select>
+                </div>
+
+                <div class="context-group hidden" data-for="tolke">
+                    <label for="tolke-model">Model</label>
+                    <select id="tolke-model"></select>
                 </div>
             </section>
 
-            <section id="tab-oracle" class="tab-content">
-                <div class="section-header">
-                    <h1>Oracle Protocol</h1>
-                    <p class="lead">4 engines, adaptive pathing, graceful degradation under strict serverless time limits.</p>
-                </div>
-
-                <div class="oracle-input-area">
-                    <textarea id="oracle-input" class="oracle-textarea" placeholder="Enter your high-stakes inquiry here..." rows="3"></textarea>
-                    <div class="oracle-controls">
-                        <select id="oracle-mode" class="oracle-mode-select">
-                            <option value="auto">Auto (recommended)</option>
-                            <option value="swift">Swift (mobile/low-latency)</option>
-                            <option value="full">Full (deep review)</option>
-                        </select>
-                        <button class="oracle-submit-btn" id="oracle-run-btn" onclick="runOracle()">Initiate Protocol</button>
-                    </div>
-                </div>
-
-                <div class="engine-roster" id="engine-roster">
-                    <div class="engine-node"><div class="engine-dot" style="background:#22d3ee;"></div><span>DeepSeek V3.2</span><span class="engine-role">Core</span></div>
-                    <div class="engine-node"><div class="engine-dot" style="background:#f472b6;"></div><span>Kimi K2.5</span><span class="engine-role">Editor</span></div>
-                    <div class="engine-node"><div class="engine-dot" style="background:#8b5cf6;"></div><span>DeepSeek Reasoner</span><span class="engine-role">Synthesis</span></div>
-                    <div class="engine-node"><div class="engine-dot" style="background:#c084fc;"></div><span>MiniMax M2.1</span><span class="engine-role">Alternate</span></div>
-                    <div class="engine-node"><div class="engine-dot" style="background:#facc15;"></div><span>Gemini 3 Flash</span><span class="engine-role">Speed</span></div>
-                    <div class="engine-node"><div class="engine-dot" style="background:#60a5fa;"></div><span>Gemini 2.5 Pro</span><span class="engine-role">Judge</span></div>
-                </div>
-
-                <div class="stage-tracker" id="stage-tracker" style="display:none;">
-                    <div class="stage-item" id="s1"><span class="stage-num">01</span> Frame</div>
-                    <div class="stage-item" id="s2"><span class="stage-num">02</span> Draft</div>
-                    <div class="stage-item" id="s3"><span class="stage-num">03</span> Critique</div>
-                    <div class="stage-item" id="s4"><span class="stage-num">04</span> Defense</div>
-                    <div class="stage-item" id="s5"><span class="stage-num">05</span> Reconcile</div>
-                    <div class="stage-item" id="s6"><span class="stage-num">06</span> Polish</div>
-                    <div class="stage-item" id="s7"><span class="stage-num">07</span> Final</div>
-                </div>
-
-                <div class="nexus-container" id="nexus-animation" style="display:none;">
-                    <div class="nexus-ring">
-                        <div class="nexus-dot dot-1"></div>
-                        <div class="nexus-dot dot-2"></div>
-                        <div class="nexus-dot dot-3"></div>
-                        <div class="nexus-dot dot-4"></div>
-                    </div>
-                    <div class="nexus-label" id="nexus-label">Deconstructing...</div>
-                </div>
-
-                <div class="oracle-result" id="oracle-result" style="display:none;">
-                    <div class="result-header">
-                        <h2>Final Protocol</h2>
-                        <span class="result-meta" id="result-meta"></span>
-                    </div>
-                    <div class="result-body" id="oracle-output"></div>
-                    <button class="trace-toggle" onclick="toggleTrace()">View Full Debate Transcript</button>
-                    <div class="trace-container" id="trace-container" style="display:none;"></div>
-                </div>
+            <section class="chat-panel">
+                <div class="chat-feed" id="chat-feed"></div>
+                <details class="trace-panel hidden" id="oracle-trace-wrap">
+                    <summary>Oracle trace</summary>
+                    <div id="oracle-trace"></div>
+                </details>
             </section>
 
-            <section id="tab-council" class="tab-content">
-                <div class="section-header">
-                    <h1>Council Hall</h1>
-                    <p class="lead">Persona-guided dialogue with clean threading and role-preserving memory.</p>
-                </div>
-
-                <div class="chat-layout">
-                    <div class="agent-window selector-panel">
-                        <div class="agent-title">Personas</div>
-                        <div id="council-persona-list" class="selector-list"></div>
-                    </div>
-                    <div class="agent-window conversation-panel">
-                        <div class="agent-header">
-                            <span class="agent-title">Dialogue</span>
-                            <span class="agent-status" id="council-status">Ready</span>
-                        </div>
-                        <div class="agent-chat" id="council-chat-history"></div>
-                        <div class="input-bar">
-                            <input type="text" id="council-input" placeholder="Message persona..." onkeydown="if(event.key==='Enter') sendCouncilMessage()">
-                            <button onclick="sendCouncilMessage()">Send</button>
-                        </div>
-                    </div>
-                </div>
+            <section class="composer">
+                <textarea id="chat-input" rows="2" placeholder="Type your message..."></textarea>
+                <button id="send-btn" type="button">Send</button>
             </section>
-
-            <section id="tab-chat" class="tab-content">
-                <div class="section-header">
-                    <h1>Direct Uplink</h1>
-                    <p class="lead">Per-engine channels with preserved context and less clutter.</p>
-                </div>
-
-                <div class="chat-layout">
-                    <div class="agent-window selector-panel">
-                        <div class="agent-title">Engines</div>
-                        <div id="chat-model-list" class="selector-list"></div>
-                    </div>
-                    <div class="agent-window conversation-panel">
-                        <div class="agent-header">
-                            <span class="agent-title">Stream</span>
-                            <span class="agent-status" id="direct-status">Ready</span>
-                        </div>
-                        <div class="agent-chat" id="chat-history"></div>
-                        <div class="input-bar">
-                            <input type="text" id="chat-input" placeholder="Message engine..." onkeydown="if(event.key==='Enter') sendDirectMessage()">
-                            <button onclick="sendDirectMessage()">Send</button>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <section id="tab-tolke" class="tab-content">
-                <div class="section-header">
-                    <h1>Tolke</h1>
-                    <p class="lead">Sharp therapeutic chat with memory, pattern callouts, and clear reflection.</p>
-                </div>
-
-                <div class="chat-layout">
-                    <div class="agent-window selector-panel">
-                        <div class="agent-title">Tolke Engine</div>
-                        <div id="tolke-model-list" class="selector-list"></div>
-                    </div>
-                    <div class="agent-window conversation-panel">
-                        <div class="agent-header">
-                            <span class="agent-title">Tolke Session</span>
-                            <span class="agent-status">Live</span>
-                        </div>
-                        <div class="agent-chat" id="tolke-history"></div>
-                        <div class="input-bar">
-                            <input type="text" id="tolke-input" placeholder="Tell Tolke what is going on..." onkeydown="if(event.key==='Enter') sendTolkeMessage()">
-                            <button onclick="sendTolkeMessage()">Send</button>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        </div>
-    </main>
+        </main>
+    </div>
 
     <script type="module" src="/src/main.js"></script>
 </body>
