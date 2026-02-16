@@ -140,6 +140,12 @@ function setMode(mode) {
         g.classList.toggle("hidden", g.dataset.for !== mode);
     });
 
+    const input = document.getElementById("chat-input");
+    if (mode === "oracle") input.placeholder = "Ask Oracle a high-stakes question...";
+    else if (mode === "council") input.placeholder = "Ask the selected persona...";
+    else if (mode === "tolke") input.placeholder = "Talk to Tolke...";
+    else input.placeholder = "Type your message...";
+
     renderFeed();
 }
 

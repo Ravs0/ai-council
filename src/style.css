@@ -1,19 +1,21 @@
 :root {
-    --bg: #0f1724;
-    --bg-soft: #182233;
-    --panel: #1e2a3d;
-    --panel-2: #25344a;
-    --line: #334863;
+    --cloud-1: #f4f9f9;
+    --cloud-2: #eaf3f3;
+    --cloud-3: #dce9e9;
 
-    --text: #e8f1ff;
-    --muted: #a7bdd8;
+    --card: #ffffff;
+    --card-soft: #f7fbfb;
+    --line: #c7dada;
 
-    --accent: #65d4ff;
-    --accent-2: #8da8ff;
-    --good: #80f0c0;
+    --text: #183638;
+    --muted: #5d7f80;
+
+    --teal: #149f9f;
+    --teal-strong: #0f7f80;
+    --teal-soft: #daf6f3;
 
     --radius: 14px;
-    --shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+    --shadow: 0 10px 28px rgba(20, 85, 85, 0.12);
 }
 
 * {
@@ -27,225 +29,200 @@ body {
     font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     color: var(--text);
     background:
-        radial-gradient(1200px 700px at -10% -10%, #25314a 0%, transparent 55%),
-        radial-gradient(1000px 600px at 120% 0%, #1d3452 0%, transparent 58%),
-        linear-gradient(180deg, #0d1624 0%, #111b2c 100%);
+        radial-gradient(1000px 500px at -10% -20%, #ffffff 0%, transparent 60%),
+        radial-gradient(900px 500px at 120% 0%, #e8fbf8 0%, transparent 60%),
+        linear-gradient(180deg, var(--cloud-1) 0%, var(--cloud-2) 100%);
 }
 
-.app-shell {
-    min-height: 100vh;
+.app {
+    width: min(1100px, 100% - 28px);
+    margin: 18px auto;
     display: grid;
-    grid-template-columns: 240px 1fr;
+    grid-template-rows: auto auto 1fr auto;
+    gap: 12px;
 }
 
-.sidebar {
-    border-right: 1px solid var(--line);
-    background: rgba(15, 23, 36, 0.78);
-    backdrop-filter: blur(8px);
-    padding: 28px 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-}
-
-.brand {
-    font-size: 24px;
-    font-weight: 800;
-    letter-spacing: 1px;
-}
-
-.sidebar-note {
-    color: var(--muted);
-    line-height: 1.5;
-    font-size: 14px;
-}
-
-.status-chip {
-    margin-top: auto;
+.topbar {
     border: 1px solid var(--line);
-    background: var(--panel);
-    border-radius: 999px;
-    padding: 8px 12px;
-    font-size: 12px;
-    color: var(--muted);
-    width: fit-content;
-}
-
-.workspace {
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(8px);
+    border-radius: var(--radius);
+    padding: 14px;
     display: grid;
-    grid-template-rows: auto auto auto 1fr auto;
-    gap: 14px;
-    padding: 20px 24px;
-    min-height: 100vh;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    align-items: center;
 }
 
-.workspace-header h1 {
-    font-size: 30px;
-    font-weight: 800;
-    letter-spacing: -0.5px;
+.brand-wrap h1 {
+    font-size: 24px;
+    line-height: 1.1;
+    letter-spacing: -0.3px;
 }
 
-.workspace-header p {
-    margin-top: 6px;
+.brand-wrap p {
+    margin-top: 4px;
     color: var(--muted);
+    font-size: 14px;
 }
 
 .mode-bar {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
 .mode-btn {
     border: 1px solid var(--line);
-    background: var(--panel);
+    background: var(--card);
     color: var(--text);
     border-radius: 999px;
-    padding: 8px 14px;
+    padding: 8px 12px;
     font-weight: 600;
     cursor: pointer;
 }
 
 .mode-btn.active {
-    border-color: var(--accent);
-    background: #1d3c56;
-    color: #ddf6ff;
+    border-color: var(--teal);
+    background: var(--teal-soft);
+    color: var(--teal-strong);
 }
 
 .context-bar {
     display: flex;
-    gap: 12px;
+    gap: 10px;
     flex-wrap: wrap;
 }
 
 .context-group {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     border: 1px solid var(--line);
-    background: var(--panel);
+    background: var(--card-soft);
     border-radius: 10px;
     padding: 8px 10px;
 }
 
 .context-group label {
-    color: var(--muted);
     font-size: 13px;
+    color: var(--muted);
     font-weight: 600;
 }
 
 .context-group select {
     border: 1px solid var(--line);
-    background: var(--panel-2);
+    background: var(--card);
     color: var(--text);
     border-radius: 8px;
-    padding: 8px 10px;
-    min-width: 180px;
+    padding: 7px 10px;
+    min-width: 170px;
     font-family: inherit;
 }
 
 .chat-panel {
     border: 1px solid var(--line);
-    background: rgba(30, 42, 61, 0.8);
+    background: var(--card);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
-    min-height: 0;
+    overflow: hidden;
+    min-height: 56vh;
     display: grid;
     grid-template-rows: 1fr auto;
-    overflow: hidden;
 }
 
 .chat-feed {
-    padding: 16px;
+    padding: 14px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 9px;
 }
 
 .msg {
-    max-width: min(860px, 92%);
-    padding: 12px 14px;
+    max-width: min(820px, 92%);
     border-radius: 12px;
-    line-height: 1.55;
+    padding: 11px 12px;
+    line-height: 1.5;
     white-space: pre-wrap;
+    border: 1px solid var(--line);
 }
 
 .msg.user {
     align-self: flex-end;
-    background: #20527a;
-    border: 1px solid #2f6b9d;
+    background: #d9f5ef;
+    border-color: #9fd8cc;
 }
 
 .msg.assistant {
     align-self: flex-start;
-    background: #24364f;
-    border: 1px solid #3a5375;
+    background: #f7fbfb;
 }
 
 .msg-meta {
     font-size: 11px;
-    color: #9dc9ff;
-    margin-bottom: 6px;
+    color: #2d8888;
+    margin-bottom: 5px;
     font-weight: 700;
     text-transform: uppercase;
 }
 
 .trace-panel {
     border-top: 1px solid var(--line);
-    padding: 10px 14px;
-    background: #1a2a40;
+    background: #f0f8f8;
+    padding: 8px 12px;
 }
 
 .trace-panel summary {
-    cursor: pointer;
-    color: var(--muted);
     font-weight: 700;
+    color: var(--muted);
+    cursor: pointer;
 }
 
 .trace-item {
     border: 1px solid var(--line);
-    background: #21324b;
+    background: #ffffff;
     border-radius: 10px;
-    padding: 10px;
     margin-top: 8px;
+    padding: 8px;
 }
 
 .trace-head {
     font-size: 12px;
     font-weight: 700;
-    color: #9adfff;
-    margin-bottom: 6px;
+    color: var(--teal-strong);
+    margin-bottom: 5px;
 }
 
 .trace-body {
     font-size: 13px;
-    color: #d5e8ff;
+    color: #345859;
     white-space: pre-wrap;
 }
 
 .composer {
     display: grid;
-    grid-template-columns: 1fr 130px;
+    grid-template-columns: 1fr 120px;
     gap: 10px;
 }
 
 .composer textarea {
     width: 100%;
-    resize: none;
     border: 1px solid var(--line);
-    background: var(--panel);
+    background: var(--card);
     color: var(--text);
     border-radius: 12px;
-    padding: 12px 14px;
+    padding: 11px 12px;
+    resize: none;
+    line-height: 1.4;
     font: inherit;
-    line-height: 1.45;
 }
 
 .composer button {
-    border: 1px solid #2b6d97;
-    background: linear-gradient(180deg, #2a739f 0%, #215f84 100%);
-    color: #eaf7ff;
+    border: 1px solid var(--teal);
+    background: linear-gradient(180deg, #1eafac 0%, #138f8f 100%);
+    color: #ecffff;
     border-radius: 12px;
     font-weight: 700;
     cursor: pointer;
@@ -260,32 +237,28 @@ body {
     display: none !important;
 }
 
-@media (max-width: 1000px) {
-    .app-shell {
+@media (max-width: 900px) {
+    .app {
+        width: calc(100% - 14px);
+        margin: 8px auto;
+        gap: 9px;
+    }
+
+    .topbar {
+        padding: 10px;
         grid-template-columns: 1fr;
     }
 
-    .sidebar {
-        border-right: 0;
-        border-bottom: 1px solid var(--line);
-        padding: 14px 14px 12px;
-        gap: 8px;
+    .brand-wrap h1 {
+        font-size: 20px;
     }
 
-    .status-chip {
-        margin-top: 2px;
-    }
-
-    .workspace {
-        padding: 12px;
-        gap: 10px;
-    }
-
-    .workspace-header h1 {
-        font-size: 24px;
+    .brand-wrap p {
+        font-size: 13px;
     }
 
     .mode-bar {
+        justify-content: flex-start;
         overflow-x: auto;
         flex-wrap: nowrap;
         padding-bottom: 2px;
@@ -293,6 +266,7 @@ body {
 
     .mode-btn {
         white-space: nowrap;
+        padding: 8px 11px;
     }
 
     .context-group {
@@ -302,26 +276,27 @@ body {
 
     .context-group select {
         min-width: 0;
-        width: 62%;
+        width: 64%;
     }
 
     .chat-panel {
-        min-height: 54vh;
+        min-height: 62vh;
     }
 
     .msg {
-        max-width: 96%;
+        max-width: 97%;
         font-size: 14px;
     }
 
     .composer {
         position: sticky;
-        bottom: 0;
+        bottom: 6px;
+        grid-template-columns: 1fr 98px;
+        gap: 8px;
         padding: 8px;
-        background: rgba(14, 24, 37, 0.96);
-        backdrop-filter: blur(6px);
         border: 1px solid var(--line);
+        background: rgba(244, 251, 251, 0.95);
         border-radius: 12px;
-        grid-template-columns: 1fr 104px;
+        backdrop-filter: blur(4px);
     }
 }

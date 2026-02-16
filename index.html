@@ -13,66 +13,59 @@
 </head>
 
 <body>
-    <div class="app-shell">
-        <aside class="sidebar">
-            <div class="brand">AI COUNCIL</div>
-            <p class="sidebar-note">One chat surface. Switch modes as needed.</p>
-            <div class="status-chip">Secure Multi-Mode</div>
-        </aside>
-
-        <main class="workspace">
-            <header class="workspace-header">
-                <h1>Chat Workspace</h1>
-                <p>Standard interface with mode switching for Oracle, Council, Direct, and Tolke.</p>
-            </header>
-
-            <section class="mode-bar" id="mode-bar">
+    <main class="app">
+        <header class="topbar">
+            <div class="brand-wrap">
+                <h1>AI Council</h1>
+                <p>One chat, switch modes.</p>
+            </div>
+            <section class="mode-bar" id="mode-bar" aria-label="Modes">
                 <button class="mode-btn active" data-mode="direct" type="button">Direct</button>
                 <button class="mode-btn" data-mode="oracle" type="button">Oracle</button>
                 <button class="mode-btn" data-mode="council" type="button">Council</button>
                 <button class="mode-btn" data-mode="tolke" type="button">Tolke</button>
             </section>
+        </header>
 
-            <section class="context-bar">
-                <div class="context-group" data-for="direct">
-                    <label for="direct-model">Model</label>
-                    <select id="direct-model"></select>
-                </div>
+        <section class="context-bar">
+            <div class="context-group" data-for="direct">
+                <label for="direct-model">Model</label>
+                <select id="direct-model"></select>
+            </div>
 
-                <div class="context-group hidden" data-for="oracle">
-                    <label for="oracle-mode">Oracle Mode</label>
-                    <select id="oracle-mode">
-                        <option value="auto">Auto (recommended)</option>
-                        <option value="swift">Swift</option>
-                        <option value="full">Full</option>
-                    </select>
-                </div>
+            <div class="context-group hidden" data-for="oracle">
+                <label for="oracle-mode">Run Mode</label>
+                <select id="oracle-mode">
+                    <option value="auto">Auto</option>
+                    <option value="swift">Swift</option>
+                    <option value="full">Full</option>
+                </select>
+            </div>
 
-                <div class="context-group hidden" data-for="council">
-                    <label for="council-persona">Persona</label>
-                    <select id="council-persona"></select>
-                </div>
+            <div class="context-group hidden" data-for="council">
+                <label for="council-persona">Persona</label>
+                <select id="council-persona"></select>
+            </div>
 
-                <div class="context-group hidden" data-for="tolke">
-                    <label for="tolke-model">Model</label>
-                    <select id="tolke-model"></select>
-                </div>
-            </section>
+            <div class="context-group hidden" data-for="tolke">
+                <label for="tolke-model">Model</label>
+                <select id="tolke-model"></select>
+            </div>
+        </section>
 
-            <section class="chat-panel">
-                <div class="chat-feed" id="chat-feed"></div>
-                <details class="trace-panel hidden" id="oracle-trace-wrap">
-                    <summary>Oracle trace</summary>
-                    <div id="oracle-trace"></div>
-                </details>
-            </section>
+        <section class="chat-panel">
+            <div class="chat-feed" id="chat-feed"></div>
+            <details class="trace-panel hidden" id="oracle-trace-wrap">
+                <summary>Oracle Trace</summary>
+                <div id="oracle-trace"></div>
+            </details>
+        </section>
 
-            <section class="composer">
-                <textarea id="chat-input" rows="2" placeholder="Type your message..."></textarea>
-                <button id="send-btn" type="button">Send</button>
-            </section>
-        </main>
-    </div>
+        <section class="composer">
+            <textarea id="chat-input" rows="2" placeholder="Type your message..."></textarea>
+            <button id="send-btn" type="button">Send</button>
+        </section>
+    </main>
 
     <script type="module" src="/src/main.js"></script>
 </body>
