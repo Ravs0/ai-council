@@ -1,68 +1,7 @@
 from http.server import BaseHTTPRequestHandler
 import json
 import os
-import re
-import time
-from urllib.parse import urlparse
-
-import requests as http
-
-MODELS = {
-    "deepseek": {
-        "name": "DeepSeek V3.2",
-        "model_id": "deepseek-ai/deepseek-v3.2",
-        "api_key": os.environ.get("DEEPSEEK_NVIDIA_API_KEY"),
-        "base_url": "https://integrate.api.nvidia.com/v1",
-    },
-    "kimi": {
-        "name": "Kimi K2.5",
-        "model_id": "moonshotai/kimi-k2.5",
-        "api_key": os.environ.get("KIMI_API_KEY"),
-        "base_url": "https://integrate.api.nvidia.com/v1",
-    },
-    "minimax": {
-        "name": "Minimax M2.1",
-        "model_id": "minimaxai/minimax-m2.1",
-        "api_key": os.environ.get("MINIMAX_API_KEY"),
-        "base_url": "https://integrate.api.nvidia.com/v1",
-    },
-    "reasoner": {
-        "name": "DeepSeek Reasoner",
-        "model_id": "deepseek-reasoner",
-        "api_key": os.environ.get("DEEPSEEK_REASONER_API_KEY"),
-        "base_url": "https://api.deepseek.com/v1",
-    },
-    "groq": {
-        "name": "Groq Llama 3.3 70B",
-        "model_id": "llama-3.3-70b-versatile",
-        "api_key": os.environ.get("GROQ_API_KEY"),
-        "base_url": "https://api.groq.com/openai/v1",
-    },
-    "sarvam": {
-        "name": "Sarvam M",
-        "model_id": "sarvam-m",
-        "api_key": os.environ.get("SARVAM_API_KEY"),
-        "base_url": "https://api.sarvam.ai/v1",
-    },
-}
-
-MODEL_ALIASES = {
-    "deepseek_reasoner": "reasoner",
-    "deepseek-reasoner": "reasoner",
-    "gemini_flash": "gemini-flash",
-    "gemini_pro": "gemini-pro",
-    "groq": "groq",
-    "sarvam": "sarvam",
-}
-
-MAX_PROMPT_CHARS = 16000
-MIN_TOKENS = 64
-MAX_TOKENS = 1200
-MAX_RETRIES = 2
-REQUEST_TIMEOUT = (4, 16)
-ALLOWED_ORIGINS = {
-    o.strip() for o in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()
-}
+from api.llm_utils import LLMClient, RateLimitError, MODEL_ALIASES, MAX_PROMPT_CHARS, MIN_TOKENS, MAX_TOKENS
 
 
 def _safe_int(v, fallback):
@@ -72,211 +11,79 @@ def _safe_int(v, fallback):
         return fallback
 
 
-def _extract_text(data):
-    message = data.get("choices", [{}])[0].get("message", {})
-    text = message.get("content") or message.get("reasoning_content") or ""
-    return re.sub(r"<(think|thought)>[\s\S]*?</\1>\s*", "", text, flags=re.IGNORECASE).strip()
-
-
-def _extract_gemini_text(data):
-    candidates = data.get("candidates", [])
-    if not candidates:
-        return ""
-    parts = candidates[0].get("content", {}).get("parts", [])
-    text_chunks = [p.get("text", "") for p in parts if isinstance(p, dict)]
-    return "\n".join(chunk for chunk in text_chunks if chunk).strip()
+def _cors_headers(handler, origin: str):
+    """Write CORS headers. Always allow the request's origin (we validate at app level)."""
+    handler.send_header("Access-Control-Allow-Origin", origin or "*")
+    handler.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+    handler.send_header("Access-Control-Allow-Headers", "Content-Type")
+    handler.send_header("Vary", "Origin")
 
 
 class handler(BaseHTTPRequestHandler):
-    def _resolve_allowed_origin(self):
-        origin = self.headers.get("Origin")
-        if not origin:
-            return None
 
-        if origin in ALLOWED_ORIGINS:
-            return origin
-
-        # Default allow only same-origin requests when explicit allowlist is not set.
-        host = self.headers.get("Host", "")
-        parsed = urlparse(origin)
-        if parsed.netloc and parsed.netloc == host:
-            return origin
-
-        return None
+    def _origin(self) -> str:
+        """Return the request origin, or '*' if none."""
+        return self.headers.get("Origin") or "*"
 
     def do_OPTIONS(self):
-        allow_origin = self._resolve_allowed_origin()
-        if not allow_origin:
-            self.send_response(403)
-            self.end_headers()
-            return
-
+        """Respond to CORS preflight — always allow so the browser can POST."""
         self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", allow_origin)
-        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.send_header("Vary", "Origin")
+        _cors_headers(self, self._origin())
         self.end_headers()
 
     def do_POST(self):
-        allow_origin = self._resolve_allowed_origin()
-        origin = self.headers.get("Origin")
-        if origin and not allow_origin:
-            return self._json(403, {"error": "Origin not allowed."}, allow_origin=None)
+        origin = self._origin()
 
         try:
             length = _safe_int(self.headers.get("Content-Length", 0), 0)
             raw = self.rfile.read(length) if length else b"{}"
             body = json.loads(raw)
         except json.JSONDecodeError:
-            return self._json(400, {"error": "Invalid JSON body."}, allow_origin=allow_origin)
+            return self._json(400, {"error": "Invalid JSON body."}, origin)
 
         model_key = (body.get("model") or "").strip().lower()
-        model_key = MODEL_ALIASES.get(model_key, model_key)
-        prompt = (body.get("prompt") or "").strip()
-        if not prompt:
-            return self._json(400, {"error": "Prompt is required."}, allow_origin=allow_origin)
-        if len(prompt) > MAX_PROMPT_CHARS:
-            return self._json(400, {"error": f"Prompt too long (>{MAX_PROMPT_CHARS} chars)."}, allow_origin=allow_origin)
+        prompt    = (body.get("prompt") or "").strip()
 
-        system = (body.get("system") or "You are a helpful assistant.").strip()
+        if not prompt:
+            return self._json(400, {"error": "Prompt is required."}, origin)
+        if len(prompt) > MAX_PROMPT_CHARS:
+            return self._json(400, {"error": f"Prompt too long (>{MAX_PROMPT_CHARS} chars)."}, origin)
+
+        system     = (body.get("system") or "You are a helpful assistant.").strip()
         max_tokens = _safe_int(body.get("max_tokens", 700), 700)
         max_tokens = max(MIN_TOKENS, min(MAX_TOKENS, max_tokens))
 
-        if model_key in ("gemini-flash", "gemini-pro"):
-            api_key = os.environ.get("GEMINI_API_KEY")
-            if not api_key:
-                return self._json(400, {"error": "Model gemini is not configured."}, allow_origin=allow_origin)
-
-            gemini_model = "gemini-3-flash" if model_key == "gemini-flash" else "gemini-2.5-pro"
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={api_key}"
-            payload = {
-                "contents": [{"parts": [{"text": f"{system}\n\n{prompt}"}]}],
-                "generationConfig": {
-                    "temperature": 0.55,
-                    "maxOutputTokens": max_tokens,
-                },
-            }
-
-            last_error = None
-            for attempt in range(MAX_RETRIES + 1):
-                try:
-                    response = http.post(url, json=payload, timeout=REQUEST_TIMEOUT)
-                    if response.status_code in (404,) and model_key == "gemini-flash":
-                        gemini_model = "gemini-2.5-flash"
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={api_key}"
-                        response = http.post(url, json=payload, timeout=REQUEST_TIMEOUT)
-
-                    if response.status_code in (408, 409, 429, 500, 502, 503, 504):
-                        last_error = f"upstream {response.status_code}"
-                        if attempt < MAX_RETRIES:
-                            time.sleep(0.6 * (attempt + 1))
-                            continue
-                    response.raise_for_status()
-                    data = response.json()
-                    text = _extract_gemini_text(data)
-                    return self._json(200, {"text": text}, allow_origin=allow_origin)
-                except (http.exceptions.Timeout, http.exceptions.ConnectionError):
-                    last_error = "provider timeout"
-                    if attempt < MAX_RETRIES:
-                        time.sleep(0.5 * (attempt + 1))
-                        continue
-                except (http.exceptions.HTTPError, ValueError):
-                    last_error = "upstream response error"
-                    if attempt < MAX_RETRIES:
-                        time.sleep(0.5 * (attempt + 1))
-                        continue
-                    break
-                except Exception:
-                    last_error = "internal request error"
-                    break
-
-            return self._json(502, {"error": f"Model request failed ({last_error})."}, allow_origin=allow_origin)
-
-        if model_key == "sarvam":
-            try:
-                # Local import fallback
-                try:
-                    from api.sarvam_model import call_sarvam
-                except ImportError:
-                    try:
-                        from sarvam_model import call_sarvam
-                    except ImportError:
-                        # Direct import if running inside api directory
-                        import sarvam_model
-                        call_sarvam = sarvam_model.call_sarvam
-
-                text = call_sarvam(
-                    model_id="sarvam-2.0-8b-instruct",  # Updated to latest instruct model
-                    prompt=prompt,
-                    system_prompt=system,
-                    max_tokens=max_tokens
+        # Synthesis / research-agent is too slow for a single Vercel function.
+        # Guard it upfront with a clear explanation rather than a silent timeout.
+        if model_key == "research-agent":
+            return self._json(503, {
+                "error": (
+                    "The 7-Phase Synthesis Protocol requires a long-running worker "
+                    "and cannot run inside a Vercel serverless function (60 s limit). "
+                    "Run the local server for Synthesis mode."
                 )
-                return self._json(200, {"text": text}, allow_origin=allow_origin)
-            except Exception as e:
-                return self._json(502, {"error": f"Sarvam error: {str(e)}"}, allow_origin=allow_origin)
+            }, origin)
 
-        config = MODELS.get(model_key)
-        if not config:
-            return self._json(400, {"error": "Unsupported model."}, allow_origin=allow_origin)
-        if not config.get("api_key"):
-            return self._json(400, {"error": f"Model {model_key} is not configured."}, allow_origin=allow_origin)
+        client = LLMClient()
 
-        headers = {
-            "Authorization": f"Bearer {config['api_key']}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": config["model_id"],
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt},
-            ],
-            "max_tokens": max_tokens,
-            "temperature": 0.55,
-        }
+        try:
+            text = client.call_model(model_key, prompt, system, max_tokens)
+            return self._json(200, {"text": text}, origin)
 
-        url = f"{config['base_url']}/chat/completions"
-        last_error = None
+        except ValueError as ve:
+            return self._json(400, {"error": str(ve)}, origin)
+        except RateLimitError:
+            return self._json(429, {"error": "Rate limit hit. Please wait a moment and retry."}, origin)
+        except Exception as e:
+            return self._json(502, {"error": f"Model error: {str(e)}"}, origin)
 
-        for attempt in range(MAX_RETRIES + 1):
-            try:
-                response = http.post(url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
-
-                if response.status_code in (408, 409, 429, 500, 502, 503, 504):
-                    last_error = f"upstream {response.status_code}"
-                    if attempt < MAX_RETRIES:
-                        time.sleep(0.6 * (attempt + 1))
-                        continue
-
-                response.raise_for_status()
-                data = response.json()
-                text = _extract_text(data)
-                return self._json(200, {"text": text}, allow_origin=allow_origin)
-            except (http.exceptions.Timeout, http.exceptions.ConnectionError):
-                last_error = "provider timeout"
-                if attempt < MAX_RETRIES:
-                    time.sleep(0.5 * (attempt + 1))
-                    continue
-            except (http.exceptions.HTTPError, ValueError):
-                last_error = "upstream response error"
-                if attempt < MAX_RETRIES:
-                    time.sleep(0.5 * (attempt + 1))
-                    continue
-                break
-            except Exception:
-                last_error = "internal request error"
-                break
-
-        return self._json(502, {"error": f"Model request failed ({last_error})."}, allow_origin=allow_origin)
-
-    def _json(self, code, data, allow_origin=None):
+    def _json(self, code: int, data: dict, origin: str):
+        body = json.dumps(data).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
-        if allow_origin:
-            self.send_header("Access-Control-Allow-Origin", allow_origin)
-            self.send_header("Vary", "Origin")
+        _cors_headers(self, origin)
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(json.dumps(data).encode("utf-8"))
+        self.wfile.write(body)

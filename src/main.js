@@ -26,6 +26,7 @@ const MODE_DESCRIPTIONS = {
     oracle: "Multi-model deliberation engine",
     council: "Persona-driven strategic advice",
     tolke: "Warm, sharp conversational guide",
+    synthesis: "7-Phase Adversarial Synthesis Protocol",
     editor: "Collaborative document editor"
 };
 
@@ -70,6 +71,7 @@ function modeTitle(mode) {
     if (mode === "oracle") return "Oracle";
     if (mode === "council") return "Council";
     if (mode === "tolke") return "Tolke";
+    if (mode === "synthesis") return "Synthesis";
     if (mode === "editor") return "Editor";
     return "Direct";
 }
@@ -78,6 +80,7 @@ function currentKey() {
     if (state.mode === "oracle") return "oracle";
     if (state.mode === "direct") return `direct:${state.selectedDirectModel}`;
     if (state.mode === "tolke") return `tolke:${state.selectedTolkeModel}`;
+    if (state.mode === "synthesis") return "synthesis";
     if (state.mode === "editor") return "editor";
     return `council:${state.selectedPersona}`;
 }
@@ -251,6 +254,9 @@ function setMode(mode) {
             oracleTrace.classList.add("hidden");
         } else if (mode === "tolke") {
             input.placeholder = "Talk to Tolke...";
+            oracleTrace.classList.add("hidden");
+        } else if (mode === "synthesis") {
+            input.placeholder = "Enter a premise to shatter and synthesize...";
             oracleTrace.classList.add("hidden");
         } else {
             input.placeholder = "Type your message...";
@@ -523,6 +529,20 @@ async function sendMessage() {
             const model = state.selectedTolkeModel;
             const response = await callAPI(model, prompt, tolkeSystemPrompt, 900);
             appendMessage(key, "assistant", response, `Tolke · ${MODEL_LABELS[model]}`);
+        } else if (state.mode === "synthesis") {
+            // Synthesis takes ~3 minutes. We pass a 5 minute timeout (300,000ms). 
+            // It relies on the Python concurrent solver.
+            appendMessage(key, "assistant", "🚀 Initializing 7-Phase Adversarial Protocol. Drafting 24 personas. Gathering constraints. This process is intensely rigorous and will take 2-4 minutes. Please hold...", "System Status");
+            renderFeed();
+
+            const response = await callAPI("research-agent", text, "You are a senior adversarial legal synthesis engine.", 4000, 360000);
+
+            // Remove the "Initializing" system message for cleaner UI history
+            const history = ensureHistory(key);
+            if (history.length > 0 && history[history.length - 1].role === "assistant" && history[history.length - 1].meta === "System Status") {
+                history.pop();
+            }
+            appendMessage(key, "assistant", response, "Latourian Synthesis Engine");
         } else {
             const model = state.selectedDirectModel;
             const historyTail = ensureHistory(key).slice(-8).map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n");

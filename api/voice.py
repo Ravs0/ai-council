@@ -17,10 +17,12 @@ except ImportError:
 
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
+        origin = self.headers.get('Origin') or '*'
         self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Origin', origin)
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_header('Vary', 'Origin')
         self.end_headers()
 
     def do_POST(self):
